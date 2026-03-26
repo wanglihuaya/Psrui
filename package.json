@@ -2,6 +2,10 @@
   "name": "psrchive-ele",
   "version": "0.0.1",
   "description": "Interactive pulsar data analysis GUI — Electron + FastAPI + PSRCHIVE",
+  "author": {
+    "name": "lihua",
+    "email": "me@lihua.dev"
+  },
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
