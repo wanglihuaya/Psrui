@@ -79,6 +79,11 @@ npm run build:mac      # Package as macOS app
 
 The workflow file lives at `.github/workflows/release.yml` and uses the repository `GITHUB_TOKEN`, so no extra publish token is required for standard GitHub Releases.
 
+If the repository has GitHub Actions workflow permissions restricted to read-only, release creation can fail with `403 Resource not accessible by integration`. In that case, either:
+
+- set `Settings -> Actions -> General -> Workflow permissions` to `Read and write permissions`, or
+- add a repository secret named `RELEASE_TOKEN` with permission to create releases in this repository.
+
 ## Project Structure
 
 ```
