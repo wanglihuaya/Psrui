@@ -2,23 +2,33 @@ name: Release
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
+  workflow_dispatch:
 
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  release:
+  build:
     strategy:
       matrix:
         include:
           - os: macos-latest
-            platform: mac
+            target: mac
+            artifact_name: macos
           - os: ubuntu-latest
-            platform: linux
+            target: linux
+            artifact_name: linux
           - os: windows-latest
-            platform: win
+            target: win
+            artifact_name: windows
 
     runs-on: ${{ matrix.os }}
 
@@ -38,20 +48,73 @@ jobs:
       - name: Build Electron app
         run: npm run build
 
-      - name: Package & publish (macOS)
-        if: matrix.platform == 'mac'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-builder --mac --publish always
+      - name: Package Electron app
+        run: npx electron-builder --${{ matrix.target }} --publish never
 
-      - name: Package & publish (Linux)
-        if: matrix.platform == 'linux'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-builder --linux --publish always
+      - name: Upload packaged artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.artifact_name }}
+          if-no-files-found: error
+          retention-days: 7
+          path: |
+            dist/*.dmg
+            dist/*.zip
+            dist/*.exe
+            dist/*.AppImage
+            dist/*.deb
+            dist/*.blockmap
+            dist/latest*.yml
+            dist/latest*.yaml
 
-      - name: Package & publish (Windows)
-        if: matrix.platform == 'win'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-builder --win --publish always
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download packaged artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          pattern: release-*
+          merge-multiple: true
+
+      - name: Compute release metadata
+        id: meta
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            tag="${GITHUB_REF_NAME}"
+            name="${GITHUB_REF_NAME}"
+            prerelease=false
+            make_latest=true
+            body="Automated stable release for ${GITHUB_REF_NAME}."
+          else
+            short_sha="${GITHUB_SHA::7}"
+            timestamp="$(date -u +'%Y-%m-%d %H:%M UTC')"
+            tag="nightly-${short_sha}"
+            name="Nightly ${timestamp} (${short_sha})"
+            prerelease=true
+            make_latest=false
+            body="Automated prerelease from main at commit ${GITHUB_SHA}."
+          fi
+
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "name=${name}" >> "$GITHUB_OUTPUT"
+          echo "prerelease=${prerelease}" >> "$GITHUB_OUTPUT"
+          echo "make_latest=${make_latest}" >> "$GITHUB_OUTPUT"
+          printf '%s\n' "${body}" > release-notes.txt
+
+      - name: Publish GitHub release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ steps.meta.outputs.tag }}
+          name: ${{ steps.meta.outputs.name }}
+          commit: ${{ github.sha }}
+          bodyFile: release-notes.txt
+          artifacts: release-assets/**/*
+          artifactErrorsFailBuild: true
+          allowUpdates: true
+          replacesArtifacts: true
+          prerelease: ${{ steps.meta.outputs.prerelease }}
+          makeLatest: ${{ steps.meta.outputs.make_latest }}

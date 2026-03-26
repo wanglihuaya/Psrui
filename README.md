@@ -71,6 +71,14 @@ npm run build          # Build for production
 npm run build:mac      # Package as macOS app
 ```
 
+## Release Automation
+
+- Push to `main`: GitHub Actions will build macOS, Linux, and Windows packages and publish a prerelease automatically.
+- Push a tag like `v0.0.2`: GitHub Actions will build the same artifacts and publish a stable GitHub Release.
+- Manual trigger: you can also run the `Release` workflow from the Actions tab with `workflow_dispatch`.
+
+The workflow file lives at `.github/workflows/release.yml` and uses the repository `GITHUB_TOKEN`, so no extra publish token is required for standard GitHub Releases.
+
 ## Project Structure
 
 ```
