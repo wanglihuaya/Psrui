@@ -1,0 +1,11 @@
+node_modules/
+out/
+dist/
+.DS_Store
+*.pyc
+__pycache__/
+backend/.venv/
+backend/venv/
+*.egg-info/
+.env
+psrchive_docs.txt

@@ -1,0 +1,25 @@
+#!/bin/sh
+#
+PATH=/usr/bin:/bin; export PATH; unalias -a
+
+echo "Clean-up"
+
+rm *.o
+rm libpsrcat.a
+
+echo "Compiling ..."
+
+LIBFILES="defineParams.c evalkern.c externalCall.c galcoord_equatorial.c \
+          plotParams.c readCatalogue.c displayOutput.c evalwrap.c \
+          galcoord_ecliptic.c parseParameters.c wc_strncmp.c"
+LIBOBJS="$(echo $LIBFILES | sed -e 's/\.c/.o/g')"
+
+/usr/bin/gcc -fcommon -Wno-implicit-function-declaration -c $LIBFILES
+
+ar crv libpsrcat.a $LIBOBJS
+
+ranlib libpsrcat.a
+
+/usr/bin/gcc -o psrcat psrcat.c -L./ -lpsrcat -lm -fcommon
+
+echo "Complete"

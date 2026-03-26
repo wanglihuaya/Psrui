@@ -1,0 +1,45 @@
+appId: com.psrchive.viewer
+productName: PSRCHIVE Viewer
+directories:
+  buildResources: build
+  output: dist
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!electron.vite.config.*'
+  - '!{.eslintignore,.eslintrc.*,.prettierrc.*,dev-app-update.yml,CHANGELOG.md,README.md}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  - '!backend/**'
+asar: true
+extraResources:
+  - from: backend
+    to: backend
+    filter:
+      - '**/*.py'
+      - 'requirements.txt'
+      - 'data/**'
+      - '!**/__pycache__'
+      - '!**/*.pyc'
+mac:
+  target:
+    - target: dmg
+      arch:
+        - arm64
+        - x64
+    - target: zip
+      arch:
+        - arm64
+        - x64
+  entitlementsInherit: build/entitlements.mac.plist
+  notarize: false
+linux:
+  target:
+    - AppImage
+    - deb
+win:
+  target:
+    - nsis
+publish:
+  provider: github
+  owner: wanglihuaya
+  repo: Psrui
