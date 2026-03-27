@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useEffectEvent, useState } from 'react'
 import { useAtom, useSetAtom, useAtomValue } from 'jotai'
 import { api } from '@/lib/api'
 import {
@@ -13,7 +13,10 @@ import {
   errorAtom,
   openFilesAtom,
   activeTabAtom,
-  helpOpenAtom
+  helpOpenAtom,
+  helpSectionAtom,
+  psrcatOpenAtom,
+  type HelpSection
 } from '@/lib/store'
 import { TitleBar } from '@/components/TitleBar'
 import { Sidebar } from '@/components/Sidebar'
@@ -22,9 +25,17 @@ import { StatusBar } from '@/components/StatusBar'
 import { SettingsPanel, applyTheme } from '@/components/SettingsPanel'
 import { HelpPanel } from '@/components/HelpPanel'
 import { PsrcatPanel } from '@/components/PsrcatPanel'
-import { settingsAtom, settingsOpenAtom, sidebarCollapsedAtom, workspacePathAtom } from '@/lib/settings'
-import { psrcatOpenAtom } from '@/lib/store'
-import { useShortcuts } from '@/lib/shortcuts'
+import {
+  settingsAtom,
+  settingsOpenAtom,
+  settingsSectionAtom,
+  sidebarCollapsedAtom,
+  workspacePathAtom,
+  type SettingsSection
+} from '@/lib/settings'
+import { useShortcuts, type ShortcutCommandId } from '@/lib/shortcuts'
+import type { BackendRuntime } from '../../shared/backend'
+import type { AppCommandId } from '../../shared/commands'
 import type { UpdateState } from '../../shared/update'
 
 export default function App() {
@@ -41,36 +52,44 @@ export default function App() {
   const setOpenFiles = useSetAtom(openFilesAtom)
   const setActiveTab = useSetAtom(activeTabAtom)
   const setHelpOpen = useSetAtom(helpOpenAtom)
+  const setHelpSection = useSetAtom(helpSectionAtom)
   const setSettingsOpen = useSetAtom(settingsOpenAtom)
-  const [sidebarCollapsed, setSidebarCollapsed] = useAtom(sidebarCollapsedAtom)
+  const setSettingsSection = useSetAtom(settingsSectionAtom)
+  const setSidebarCollapsed = useSetAtom(sidebarCollapsedAtom)
   const setWorkspacePath = useSetAtom(workspacePathAtom)
   const setPsrcatOpen = useSetAtom(psrcatOpenAtom)
   const [updateState, setUpdateState] = useState<UpdateState | null>(null)
+  const [backendRuntime, setBackendRuntime] = useState<BackendRuntime>('local')
+
+  const openSettingsSection = (section: SettingsSection = 'app') => {
+    setSettingsSection(section)
+    setSettingsOpen(true)
+  }
+
+  const openHelpSection = (section: HelpSection = 'views') => {
+    setHelpSection(section)
+    setHelpOpen(true)
+  }
+
+  const clearCurrentFile = () => {
+    setCurrentFile(null)
+    setMetadata(null)
+    setProfile(null)
+    setWaterfall(null)
+    setTimePhase(null)
+    setBandpass(null)
+    setError(null)
+  }
+
+  const setView = (view: 'profile' | 'waterfall' | 'time-phase' | 'bandpass') => {
+    setPsrcatOpen(false)
+    setActiveTab(view)
+  }
 
   // apply theme
   useEffect(() => {
     applyTheme(settings.appTheme)
   }, [settings.appTheme])
-
-  // keyboard shortcuts
-  useShortcuts({
-    'Open File': () => handleOpenFile(),
-    'Open Workspace': () => handleOpenFolder(),
-    'Toggle Sidebar': () => setSidebarCollapsed(prev => !prev),
-    'Close File': () => setCurrentFile(null),
-    'Save Image': () => console.log('Save image...'),
-    'Save Archive': () => console.log('Save archive...'),
-    'New Window': () => window.electron?.newWindow?.(),
-    'Profile View': () => setActiveTab('profile'),
-    'Freq × Phase': () => setActiveTab('waterfall'),
-    'Time × Phase': () => setActiveTab('time-phase'),
-    'Bandpass': () => setActiveTab('bandpass'),
-    'PSRCAT': () => setPsrcatOpen(true),
-    'Undo': () => console.log('Undo...'),
-    'Redo': () => console.log('Redo...'),
-    'Settings': () => setSettingsOpen(true),
-    'Help': () => setHelpOpen(true),
-  })
 
   // poll backend health
   useEffect(() => {
@@ -99,6 +118,23 @@ export default function App() {
       })
     }
   }, [setCurrentFile, setOpenFiles])
+
+  useEffect(() => {
+    let mounted = true
+
+    const loadBackendRuntime = async () => {
+      const nextRuntime = await window.electron.getBackendRuntime()
+      if (mounted) {
+        setBackendRuntime(nextRuntime)
+      }
+    }
+
+    void loadBackendRuntime()
+
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   useEffect(() => {
     let mounted = true
@@ -175,10 +211,20 @@ export default function App() {
   const handleOpenFolder = async () => {
     try {
       const folder = await window.electron.openDirectory()
-      if (folder) setWorkspacePath(folder)
+      if (folder) {
+        setWorkspacePath(folder)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to open workspace')
     }
+  }
+
+  const handleSaveImage = () => {
+    setError('Save Image is not implemented yet.')
+  }
+
+  const handleSaveArchive = () => {
+    setError('Save Archive is not implemented yet.')
   }
 
   const handleCheckForUpdates = async () => {
@@ -204,14 +250,77 @@ export default function App() {
     }
   }
 
+  const handleRestartBackend = async () => {
+    try {
+      setBackendReady(false)
+      await window.electron.restartBackend()
+      const nextRuntime = await window.electron.getBackendRuntime()
+      setBackendRuntime(nextRuntime)
+      await api.health()
+      setBackendReady(true)
+      setError(null)
+    } catch (err) {
+      setBackendReady(false)
+      setError(err instanceof Error ? err.message : 'Failed to restart backend')
+    }
+  }
+
+  const commandHandlers: Partial<Record<ShortcutCommandId, () => void | Promise<void>>> = {
+    'new-window': () => window.electron.newWindow(),
+    'open-file': handleOpenFile,
+    'open-workspace': handleOpenFolder,
+    'close-file': clearCurrentFile,
+    'save-image': handleSaveImage,
+    'save-archive': handleSaveArchive,
+    'view-profile': () => setView('profile'),
+    'view-waterfall': () => setView('waterfall'),
+    'view-time-phase': () => setView('time-phase'),
+    'view-bandpass': () => setView('bandpass'),
+    'view-psrcat': () => setPsrcatOpen(true),
+    'toggle-sidebar': () => setSidebarCollapsed((prev) => !prev),
+    'open-settings': () => openSettingsSection('app'),
+    'open-help': () => openHelpSection('shortcuts'),
+    'check-for-updates': handleCheckForUpdates,
+    'update-action': handleUpdateAction,
+    'window-minimize': () => window.electron.minimizeWindow(),
+    'window-toggle-full-screen': () => window.electron.toggleFullScreen(),
+    'app-quit': () => window.electron.quitApp(),
+    'debug-reload': () => window.location.reload(),
+    'debug-force-reload': () => window.location.reload(),
+    'debug-toggle-devtools': () => undefined,
+    undo: () => console.log('Undo...'),
+    redo: () => console.log('Redo...')
+  }
+
+  const runCommand = useEffectEvent(async (commandId: AppCommandId) => {
+    const handler = commandHandlers[commandId]
+    if (!handler) {
+      return
+    }
+
+    try {
+      await handler()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : `Command failed: ${commandId}`)
+    }
+  })
+
+  useShortcuts(commandHandlers)
+
+  useEffect(() => {
+    return window.electron.onAppCommand((commandId: AppCommandId) => {
+      void runCommand(commandId)
+    })
+  }, [])
+
   return (
     <div className="flex flex-col h-screen w-screen transition-colors duration-300 bg-surface-0">
       <TitleBar
-        onOpenFile={handleOpenFile}
-        onOpenFolder={handleOpenFolder}
-        onCheckForUpdates={handleCheckForUpdates}
+        onRunCommand={(commandId: AppCommandId) => {
+          void runCommand(commandId)
+        }}
+        onOpenSettingsSection={openSettingsSection}
         updateState={updateState}
-        onUpdate={handleUpdateAction}
       />
       <div className="flex flex-1 overflow-hidden relative">
         <Sidebar onOpenFile={handleOpenFile} onOpenFolder={handleOpenFolder} />
@@ -221,7 +330,14 @@ export default function App() {
         </div>
       </div>
       <StatusBar />
-      <SettingsPanel />
+      <SettingsPanel
+        backendRuntime={backendRuntime}
+        updateState={updateState}
+        onRunCommand={(commandId: AppCommandId) => {
+          void runCommand(commandId)
+        }}
+        onRestartBackend={handleRestartBackend}
+      />
       <HelpPanel />
     </div>
   )

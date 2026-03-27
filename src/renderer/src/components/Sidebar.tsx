@@ -5,6 +5,7 @@ import {
   fileLabelMapAtom,
   labelsAtom,
   settingsOpenAtom,
+  settingsSectionAtom,
   sidebarCollapsedAtom,
   workspacePathAtom,
   type FileLabel
@@ -13,6 +14,7 @@ import {
   currentFileAtom,
   fileTreeAtom,
   fileTreeLoadingAtom,
+  helpSectionAtom,
   helpOpenAtom,
   metadataAtom,
   openFilesAtom,
@@ -86,7 +88,9 @@ export function Sidebar({ onOpenFile, onOpenFolder }: SidebarProps) {
   const [activeSection, setActiveSection] = useAtom(activeSidebarSectionAtom)
   const [psrcatOpen, setPsrcatOpen] = useAtom(psrcatOpenAtom)
   const setSettingsOpen = useSetAtom(settingsOpenAtom)
+  const setSettingsSection = useSetAtom(settingsSectionAtom)
   const setHelpOpen = useSetAtom(helpOpenAtom)
+  const setHelpSection = useSetAtom(helpSectionAtom)
   const t = useT()
 
   // Files is active when: section is files AND psrcat is NOT open AND panel is expanded
@@ -121,12 +125,18 @@ export function Sidebar({ onOpenFile, onOpenFolder }: SidebarProps) {
         <div className="flex flex-col gap-1 items-center w-full">
           <RailIcon
             icon={HelpCircle}
-            onClick={() => { setHelpOpen(true) }}
+            onClick={() => {
+              setHelpSection('views')
+              setHelpOpen(true)
+            }}
             tooltip={t('app.help')}
           />
           <RailIcon
             icon={Settings}
-            onClick={() => { setSettingsOpen(true) }}
+            onClick={() => {
+              setSettingsSection('app')
+              setSettingsOpen(true)
+            }}
             tooltip={t('app.settings')}
           />
         </div>

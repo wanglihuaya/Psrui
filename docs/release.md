@@ -1,5 +1,7 @@
 # Release Flow
 
+中文版本: [release.zh.md](release.zh.md)
+
 This project has two release tracks:
 
 - `main` push -> GitHub Actions publishes a nightly prerelease

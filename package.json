@@ -9,6 +9,7 @@
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
+    "dev:docker": "PSRCHIVE_BACKEND_RUNTIME=docker electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "start": "electron-vite preview",
@@ -16,6 +17,8 @@
     "build:unpack": "npm run build && electron-builder --dir",
     "build:mac": "npm run build && electron-builder --mac",
     "backend:dev": "cd backend && python3 -m uvicorn app.main:app --reload --port 8787",
+    "backend:docker:pull": "docker pull alex88ridolfi/psrchive_dspsr_presto_ubuntu22.04",
+    "backend:docker": "bash scripts/run-backend-docker.sh 8787",
     "backend:install": "cd backend && pip3 install -r requirements.txt",
     "typecheck": "tsc --noEmit"
   },

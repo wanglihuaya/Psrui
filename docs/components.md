@@ -1,5 +1,7 @@
 # Component Reference
 
+中文版本: [components.zh.md](components.zh.md)
+
 All components live under `src/renderer/src/components/`.
 
 ---
@@ -7,40 +9,42 @@ All components live under `src/renderer/src/components/`.
 ## TitleBar
 
 **File**: `TitleBar.tsx`  
-**Props**: `{ onOpenFile: () => void, onOpenFolder: () => void, onCheckForUpdates: () => void, updateState: UpdateState | null, onUpdate?: () => void }`
+**Props**: `{ onRunCommand: (commandId: AppCommandId) => void, onOpenSettingsSection: (section: SettingsSection) => void, updateState: UpdateState | null }`
 
-macOS-style title bar — traffic-light zone and app content share the **same horizontal line** (no separate spacer row):
+macOS-style custom title bar with three zones on the same horizontal line:
 
-- **Traffic-lights zone** (92 px reserved spacer) — native window controls sit here via `titleBarStyle: 'hiddenInset'`
-- **Update action** — rendered on the right side of the title bar so the native red / yellow / green buttons keep the standard macOS grouping:
-  - Checking: `Checking…`
-  - Update found: hoverable green dot / pill to start download
-  - Downloading: progress pill
-  - Downloaded: `Restart to Update`
-- **Menu bar** — File / View / Help dropdown menus
-- **Center filename** — current file basename or app title
-- **Backend status indicator** — green `Live` or red pulsing `Offline`
+- **Traffic-lights reserve** (92 px) — leaves room for the native red / yellow / green controls created by `titleBarStyle: 'hiddenInset'`
+- **Left command cluster** — icon-only `Toggle Sidebar` button plus a single Radix `DropdownMenu` trigger that replaces the old `File / View / Help` text menus
+- **Center filename** — current file basename or fallback app title
+- **Right status cluster** — updater pill / dot and backend `Live` / `Offline` indicator
 
-The menu bar closes on outside click or `Escape`. Help menu also includes **Check for Updates**.
+### Command menu structure
 
-**Menu items**
+Top-level order is fixed:
 
-| Menu | Item | Shortcut |
-|------|------|----------|
-| File | Open File | `⌘O` |
-| File | Open Workspace | `⌘⇧O` |
-| File | Close File | `⌘W` |
-| File | Save Image | `⌘S` |
-| File | Save Archive | `⌘⇧S` |
-| File | New Window | `⌘N` |
-| View | Profile | `⌘1` |
-| View | Freq × Phase | `⌘2` |
-| View | Time × Phase | `⌘3` |
-| View | Bandpass | `⌘4` |
-| View | PSRCAT | `⌘5` |
-| View | Toggle Sidebar | `⌘B` |
-| Help | Keyboard Shortcuts | `⌘/` |
-| Help | About | — |
+1. `New Window`
+2. `File`
+3. `View`
+4. `Window`
+5. `Settings`
+6. `Help`
+7. `Quit`
+
+Submenus:
+
+- **File** — Open File, Open Workspace, Close File, Save Image, Save Archive
+- **View** — Profile, Freq × Phase, Time × Phase, Bandpass, PSRCAT
+- **Window** — Toggle Sidebar, Minimize Window, Toggle Full Screen
+- **Help** — Keyboard Shortcuts, Check for Updates, About
+
+The custom menu and the native macOS menu bar both dispatch into the same shared command ids from `src/shared/commands.ts`.
+
+### Update affordance
+
+- `checking` — small neutral pill `Checking…`
+- `available` — compact green dot that expands to `Update` on hover
+- `downloading` — progress pill `Downloading 37%`
+- `downloaded` — `Restart to Update`
 
 ---
 
@@ -151,17 +155,58 @@ Right side (when a file is loaded): source name, telescope, `NchxNsubxNbin`, fil
 **File**: `SettingsPanel.tsx`  
 **Exported**: `SettingsPanel`, `applyTheme`
 
-Slide-in panel from the right (384 px wide), opened via `settingsOpenAtom`.
+Centered settings center (not a right drawer anymore), opened via `settingsOpenAtom`.
 
-Uses a **draft pattern**: settings are copied to `draftSettingsAtom` on open; only written back to `settingsAtom` on Save. Cancel discards the draft.
+The panel keeps the **draft-save model** for persisted preferences:
 
-**Sections**:
+- `settingsAtom` — committed preferences in local storage
+- `draftSettingsAtom` — working copy while the modal is open
+- Save commits the draft
+- Cancel discards it
 
-1. **General** — Language (EN / ZH toggle), Default View (select), Show Welcome (checkbox)
-2. **Appearance** — Theme (2×2 grid with preview), Chart Colorscale (full-width gradient swatches)
-3. **Advanced** — Backend Port (number), Python Path (text), Recent Files Limit (number)
+`settingsSectionAtom` chooses the active left-nav category and is intentionally **not** persisted.
 
-Theme is applied immediately on save via `applyTheme(draft.appTheme)`.
+### Layout
+
+- **Left column** — category navigation and updater summary
+- **Right column** — active category detail area plus a shared Save / Cancel footer
+
+### Categories
+
+1. **App**
+   - Language
+   - Show Welcome
+   - Update Status / Current Version / Update Channel
+   - `Check for Updates`
+   - Disabled placeholders: `Desktop notifications`, `Keep screen awake`, `HTTP proxy`
+2. **Appearance**
+   - Theme cards
+   - Chart Colorscale swatches
+3. **Workspace**
+   - Current workspace path
+   - `Open Workspace` / `Change Workspace`
+   - Default View
+   - Recent Files Limit
+4. **Backend**
+   - Backend status
+   - `Restart Backend`
+   - Backend Port
+   - Python Path
+5. **Shortcuts**
+   - Read-only grouped view generated from the `SHORTCUTS` constant
+6. **About**
+   - App version
+   - Release channel
+   - Update phase
+   - `Open Help`
+   - external documentation link
+
+### Immediate actions vs saved settings
+
+- Immediate: `Check for Updates`, `Open Workspace`, `Restart Backend`
+- Saved on footer: language, welcome screen, theme, colorscale, default view, recent file limit, backend port, python path
+
+Theme changes are still applied through `applyTheme(theme)` when the draft is committed.
 
 ---
 

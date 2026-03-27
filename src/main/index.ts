@@ -1,8 +1,9 @@
-import { app, BrowserWindow, shell, ipcMain, dialog } from 'electron'
+import { app, BrowserWindow, shell, ipcMain, dialog, Menu, type MenuItemConstructorOptions } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { BackendProcess } from './backend'
 import { UpdateManager } from './updater'
+import { type AppCommandId, isRendererOwnedCommand } from '../shared/commands'
 import type { UpdateState } from '../shared/update'
 
 const BACKEND_PORT = 8787
@@ -10,12 +11,129 @@ const windows = new Set<BrowserWindow>()
 let backend: BackendProcess | null = null
 let updater: UpdateManager | null = null
 
+function getPrimaryWindow(): BrowserWindow | null {
+  return BrowserWindow.getFocusedWindow()
+    ?? Array.from(windows).find((window) => !window.isDestroyed())
+    ?? BrowserWindow.getAllWindows().find((window) => !window.isDestroyed())
+    ?? null
+}
+
 function broadcastUpdateState(state: UpdateState): void {
   for (const window of windows) {
     if (!window.isDestroyed()) {
       window.webContents.send('updates:state', state)
     }
   }
+}
+
+function dispatchRendererCommand(commandId: AppCommandId): void {
+  const window = getPrimaryWindow()
+  if (!window) {
+    createWindow()
+    return
+  }
+
+  if (isRendererOwnedCommand(commandId)) {
+    window.webContents.send('app:command', commandId)
+    return
+  }
+
+  if (commandId === 'new-window') {
+    createWindow()
+  } else if (commandId === 'window-minimize') {
+    window.minimize()
+  } else if (commandId === 'window-toggle-full-screen') {
+    window.setFullScreen(!window.isFullScreen())
+  } else if (commandId === 'app-quit') {
+    app.quit()
+  }
+}
+
+function setApplicationMenu(): void {
+  const template: MenuItemConstructorOptions[] = []
+
+  if (process.platform === 'darwin') {
+    template.push({
+      label: app.getName(),
+      submenu: [
+        { role: 'about' },
+        {
+          label: 'Check for Updates',
+          click: () => dispatchRendererCommand('check-for-updates')
+        },
+        {
+          label: 'Settings…',
+          accelerator: 'CommandOrControl+,',
+          click: () => dispatchRendererCommand('open-settings')
+        },
+        { type: 'separator' },
+        { role: 'services' },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' }
+      ]
+    })
+  }
+
+  template.push(
+    {
+      label: 'File',
+      submenu: [
+        { label: 'New Window', click: () => dispatchRendererCommand('new-window') },
+        { type: 'separator' },
+        { label: 'Open File', click: () => dispatchRendererCommand('open-file') },
+        { label: 'Open Workspace', click: () => dispatchRendererCommand('open-workspace') },
+        { label: 'Close File', click: () => dispatchRendererCommand('close-file') },
+        { type: 'separator' },
+        { label: 'Save Image', click: () => dispatchRendererCommand('save-image') },
+        { label: 'Save Archive', click: () => dispatchRendererCommand('save-archive') }
+      ]
+    },
+    {
+      label: 'View',
+      submenu: [
+        { label: 'Profile', click: () => dispatchRendererCommand('view-profile') },
+        { label: 'Freq × Phase', click: () => dispatchRendererCommand('view-waterfall') },
+        { label: 'Time × Phase', click: () => dispatchRendererCommand('view-time-phase') },
+        { label: 'Bandpass', click: () => dispatchRendererCommand('view-bandpass') },
+        { label: 'PSRCAT', click: () => dispatchRendererCommand('view-psrcat') },
+        { type: 'separator' },
+        { label: 'Toggle Sidebar', click: () => dispatchRendererCommand('toggle-sidebar') },
+        { label: 'Toggle Full Screen', click: () => dispatchRendererCommand('window-toggle-full-screen') }
+      ]
+    },
+    {
+      label: 'Window',
+      submenu: [
+        { label: 'Minimize', click: () => dispatchRendererCommand('window-minimize') },
+        { role: 'zoom' },
+        { role: 'front' }
+      ]
+    },
+    {
+      label: 'Help',
+      submenu: [
+        { label: 'Keyboard Shortcuts', click: () => dispatchRendererCommand('open-help') },
+        { role: 'about' }
+      ]
+    }
+  )
+
+  if (is.dev) {
+    template.push({
+      label: 'Debug',
+      submenu: [
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { role: 'toggleDevTools' }
+      ]
+    })
+  }
+
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
 
 function createWindow(filePath?: string): void {
@@ -94,6 +212,10 @@ function registerIPC(): void {
     return backend?.isRunning() ?? false
   })
 
+  ipcMain.handle('backend:runtime', () => {
+    return backend?.getRuntime() ?? 'local'
+  })
+
   ipcMain.handle('backend:restart', async () => {
     await backend?.restart()
     return true
@@ -101,6 +223,21 @@ function registerIPC(): void {
 
   ipcMain.handle('window:new', (_, filePath?: string) => {
     createWindow(filePath)
+  })
+
+  ipcMain.handle('window:minimize', (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.minimize()
+  })
+
+  ipcMain.handle('window:toggleFullScreen', (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+    if (window) {
+      window.setFullScreen(!window.isFullScreen())
+    }
+  })
+
+  ipcMain.handle('app:quit', () => {
+    app.quit()
   })
 
   ipcMain.handle('updates:getState', () => {
@@ -143,6 +280,7 @@ app.whenReady().then(async () => {
   })
 
   registerIPC()
+  setApplicationMenu()
 
   backend = new BackendProcess(BACKEND_PORT)
   await backend.start()

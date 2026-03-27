@@ -18,6 +18,8 @@ export const errorAtom = atom<string | null>(null)
 export const backendReadyAtom = atom(false)
 export const openFilesAtom = atom<string[]>([])
 export const helpOpenAtom = atom(false)
+export type HelpSection = 'views' | 'shortcuts' | 'ui'
+export const helpSectionAtom = atom<HelpSection>('views')
 
 // PSRCAT sidebar panel open
 export const psrcatOpenAtom = atom(false)

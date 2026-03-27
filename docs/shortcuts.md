@@ -1,5 +1,7 @@
 # Keyboard Shortcuts
 
+中文版本: [shortcuts.zh.md](shortcuts.zh.md)
+
 Defined in `src/renderer/src/lib/shortcuts.ts` as the `SHORTCUTS` constant.  
 The `useShortcuts(handlers)` hook registers a `keydown` listener; on macOS `meta` maps to `⌘`, on other platforms to `Ctrl`.
 

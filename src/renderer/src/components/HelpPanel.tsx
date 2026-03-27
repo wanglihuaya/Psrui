@@ -1,18 +1,19 @@
-import { useAtom, useAtomValue } from 'jotai'
-import { helpOpenAtom } from '@/lib/store'
+import { useAtom, useAtomValue, useSetAtom } from 'jotai'
+import { helpOpenAtom, helpSectionAtom } from '@/lib/store'
 import { settingsAtom } from '@/lib/settings'
 import { SHORTCUTS } from '@/lib/shortcuts'
 import { HelpCircle, X, MousePointer2, Activity, Waves, Clock, Radio, Globe, FolderOpen, Settings, Tag, Layout } from 'lucide-react'
 import { clsx } from 'clsx'
-import { useState } from 'react'
-
-type HelpTab = 'shortcuts' | 'views' | 'ui'
 
 export function HelpButton() {
   const [, setOpen] = useAtom(helpOpenAtom)
+  const setSection = useSetAtom(helpSectionAtom)
   return (
     <button
-      onClick={() => setOpen(true)}
+      onClick={() => {
+        setSection('views')
+        setOpen(true)
+      }}
       className="p-1 hover:bg-surface-2 rounded text-text-muted hover:text-text-secondary transition-colors"
       title="Help"
     >
@@ -23,13 +24,13 @@ export function HelpButton() {
 
 export function HelpPanel() {
   const [open, setOpen] = useAtom(helpOpenAtom)
+  const [activeTab, setActiveTab] = useAtom(helpSectionAtom)
   const settings = useAtomValue(settingsAtom)
   const lang = settings.language
-  const [activeTab, setActiveTab] = useState<HelpTab>('views')
 
   if (!open) return null
 
-  const tabs: { id: HelpTab; label: string }[] = [
+  const tabs: { id: 'views' | 'shortcuts' | 'ui'; label: string }[] = [
     { id: 'views', label: lang === 'zh' ? '视图说明' : 'View Guide' },
     { id: 'shortcuts', label: lang === 'zh' ? '快捷键' : 'Shortcuts' },
     { id: 'ui', label: lang === 'zh' ? '界面操作' : 'UI Guide' }

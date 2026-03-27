@@ -1,5 +1,7 @@
 # State Reference
 
+中文版本: [state.zh.md](state.zh.md)
+
 State is managed with [Jotai](https://jotai.org/). Atoms are split into two files:
 
 - **`src/renderer/src/lib/store.ts`** — ephemeral, resets on page reload
@@ -23,6 +25,7 @@ State is managed with [Jotai](https://jotai.org/). Atoms are split into two file
 | `backendReadyAtom` | `boolean` | Set to `true` once `/api/health` succeeds |
 | `openFilesAtom` | `string[]` | All file paths currently opened (superset of tree selection) |
 | `helpOpenAtom` | `boolean` | Whether the Help panel is visible |
+| `helpSectionAtom` | `'views' \| 'shortcuts' \| 'ui'` | Which HelpPanel tab should be active when opened |
 | `psrcatOpenAtom` | `boolean` | Whether the full-screen PSRCAT panel is open |
 | `fileTreeAtom` | `FileTreeNode \| null` | Recursive tree from `/api/files/tree` |
 | `fileTreeLoadingAtom` | `boolean` | `true` while tree is being fetched |
@@ -58,6 +61,12 @@ Type: `string[]` — list of recently opened absolute paths.
 
 Type: `boolean` — whether the Settings panel is visible.
 
+### `settingsSectionAtom`
+
+Type: `'app' \| 'appearance' \| 'workspace' \| 'backend' \| 'shortcuts' \| 'about'`
+
+Non-persisted left-nav section for the settings center. Commands like the title bar `About` entry can open a specific section directly.
+
 ### `draftSettingsAtom`
 
 Type: `AppSettings | null` — working copy of settings within the panel; committed on Save, discarded on Cancel.
@@ -73,6 +82,33 @@ Type: `'files' \| 'psrcat' \| 'settings'` — selected icon-rail section (not pe
 ### `sidebarCollapsedAtom` — key `psrchive-sidebar-collapsed`
 
 Type: `boolean` — whether the navigator panel (240 px wide) is hidden.
+
+### Shared command ids (`src/shared/commands.ts`)
+
+The title bar dropdown, native macOS menu, and renderer keyboard shortcuts all share the same command ids:
+
+- `new-window`
+- `open-file`
+- `open-workspace`
+- `close-file`
+- `save-image`
+- `save-archive`
+- `view-profile`
+- `view-waterfall`
+- `view-time-phase`
+- `view-bandpass`
+- `view-psrcat`
+- `toggle-sidebar`
+- `open-settings`
+- `open-help`
+- `check-for-updates`
+- `update-action`
+- `window-minimize`
+- `window-toggle-full-screen`
+- `app-quit`
+- `debug-reload`
+- `debug-force-reload`
+- `debug-toggle-devtools`
 
 ### `labelsAtom` — key `psrchive-labels`
 

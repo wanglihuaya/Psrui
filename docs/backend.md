@@ -1,6 +1,15 @@
 # Backend
 
+中文版本: [backend.zh.md](backend.zh.md)
+
 The backend is a FastAPI application in `backend/app/` served by uvicorn on `127.0.0.1:8787`.
+
+It can run in two modes:
+
+- **Local runtime** — launches `python3 -m uvicorn ...` on the host
+- **Docker runtime** — launches the backend inside `alex88ridolfi/psrchive_dspsr_presto_ubuntu22.04`
+
+If you want the exact end-to-end pipeline from file selection to Plotly rendering, see [data-flow.md](data-flow.md).
 
 ## Entry points
 
@@ -10,6 +19,7 @@ The backend is a FastAPI application in `backend/app/` served by uvicorn on `127
 | `app/routes.py` | All REST endpoint handlers; instantiates `DataProvider` and `PsrcatDB` at module load |
 | `app/data_provider.py` | Abstract `DataProvider` base class + `MockProvider` + `PsrchiveProvider` |
 | `app/psrcat.py` | Parses `backend/data/psrcat_tar/psrcat.db` and exposes query methods |
+| `../src/main/backend.ts` | Electron-side runtime selector and process/container manager |
 
 ## Data provider
 
@@ -67,7 +77,50 @@ npm run backend:dev
 cd backend && python3 -m uvicorn app.main:app --reload --port 8787
 ```
 
+### Running through Docker / OrbStack
+
+The Electron shell can switch to Docker mode with:
+
+```bash
+PSRCHIVE_BACKEND_RUNTIME=docker npm run dev
+```
+
+Convenience scripts:
+
+```bash
+npm run backend:docker:pull   # pull alex88ridolfi/psrchive_dspsr_presto_ubuntu22.04
+npm run backend:docker        # run only the backend container on 127.0.0.1:8787
+npm run dev:docker            # Electron dev + Docker backend
+```
+
+`PSRCHIVE_BACKEND_RUNTIME` values:
+
+- `local` — default, host Python runtime
+- `docker` — container runtime with the PSRCHIVE image
+
+Docker mode mounts these host paths into the container unchanged so archive file paths remain valid:
+
+- `/Users`
+- `/Volumes`
+- `/private`
+- `/tmp`
+
+The container also mounts the repo `backend/` directory at `/workspace/backend` and lazily installs `fastapi`, `uvicorn`, and `numpy` if they are not already present in the image.
+
 ## Installing psrchive
+
+### Recommended on macOS with OrbStack
+
+Use Docker instead of trying to compile PSRCHIVE locally:
+
+```bash
+npm run backend:docker:pull
+PSRCHIVE_BACKEND_RUNTIME=docker npm run dev
+```
+
+After the backend comes up, `/api/health` should report `"provider": "psrchive"` when the image bindings load correctly.
+
+### Native host install
 
 ```bash
 # Via conda (recommended)

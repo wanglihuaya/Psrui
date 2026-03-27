@@ -1,8 +1,17 @@
 # PSRCHIVE Viewer
 
+中文版本: [README.zh.md](README.zh.md)
+
 Interactive pulsar data analysis GUI built with Electron + FastAPI + Plotly.js.
 
 Wraps the [PSRCHIVE](https://psrchive.sourceforge.net/) pulsar data processing suite in a modern desktop UI with interactive visualizations, replacing the X11/PGPLOT workflow.
+
+## Desktop UX
+
+- Unified command system: custom title bar menu, native macOS menu bar, and keyboard shortcuts all dispatch through the same shared command ids.
+- macOS-native shell: `hiddenInset` traffic lights, a custom icon command menu, and a native top menu bar with a dev-only `Debug` menu in development.
+- Settings center: categorized two-column settings UI with App, Appearance, Workspace, Backend, Shortcuts, and About sections.
+- Updater-aware chrome: updater state appears both in the title bar and inside the Settings center.
 
 ## Architecture
 
@@ -64,6 +73,23 @@ npm run backend:dev    # terminal 1
 npm run dev            # terminal 2
 ```
 
+### Development with OrbStack / Docker PSRCHIVE
+
+If you want real `psrchive` bindings without installing them on macOS directly, this repo can run the FastAPI backend inside the Docker image [`alex88ridolfi/psrchive_dspsr_presto_ubuntu22.04`](https://hub.docker.com/r/alex88ridolfi/psrchive_dspsr_presto_ubuntu22.04).
+
+```bash
+# Pull the image once
+npm run backend:docker:pull
+
+# Start the full Electron app with the backend running in Docker
+npm run dev:docker
+
+# Or run only the backend container for debugging
+npm run backend:docker
+```
+
+The Docker runtime mounts `/Users`, `/Volumes`, `/private`, and `/tmp` into the container at the same absolute paths so archive files opened from Finder still resolve correctly inside the container.
+
 ### Build
 
 ```bash
@@ -80,6 +106,7 @@ npm run build:mac      # Package as macOS app
 - On tagged releases, the workflow rewrites the packaged app version to the tag version (for example `v0.0.2` → `0.0.2`) before packaging.
 - Stable release `desc` comes from the annotated tag message, so use `git tag -a v0.0.2 -m "..."` and write the release notes there.
 - In-app updates are handled by `electron-updater`: packaged builds auto-check on launch, Help menu can manually trigger checks, available updates download on demand, and downloaded updates install via restart.
+- Native macOS menu bar items for Settings, View switching, Window actions, and Help all flow through the same renderer command map used by the custom title bar command menu.
 - Update channel split is strict: nightly installs receive GitHub prereleases only, stable installs receive stable releases only.
 
 Detailed release steps and a release note template live in [docs/release.md](docs/release.md).
@@ -97,18 +124,22 @@ If the repository has GitHub Actions workflow permissions restricted to read-onl
 psrchive-ele/
 ├── src/
 │   ├── main/
-│   │   ├── index.ts       # Window management, IPC handlers
-│   │   └── backend.ts     # FastAPI lifecycle manager
+│   │   ├── index.ts       # Window management, IPC handlers, native menu
+│   │   ├── backend.ts     # FastAPI lifecycle manager
+│   │   └── updater.ts     # electron-updater integration
 │   ├── preload/
 │   │   └── index.ts       # Context bridge (IPC → renderer)
+│   ├── shared/
+│   │   ├── commands.ts    # Shared command ids for menu / shortcuts / UI
+│   │   └── update.ts      # Shared updater state types
 │   └── renderer/src/
-│       ├── App.tsx         # Root: data loading, shortcuts
+│       ├── App.tsx         # Root: data loading, shared command handlers
 │       ├── components/
-│       │   ├── TitleBar.tsx
+│       │   ├── TitleBar.tsx       # Icon command menu + updater status
 │       │   ├── Sidebar.tsx
 │       │   ├── MainPanel.tsx
 │       │   ├── StatusBar.tsx
-│       │   ├── SettingsPanel.tsx
+│       │   ├── SettingsPanel.tsx  # Categorized settings center
 │       │   ├── HelpPanel.tsx
 │       │   └── charts/
 │       │       ├── PlotlyWrapper.tsx
@@ -166,6 +197,17 @@ The backend auto-detects psrchive availability:
 - **With psrchive**: Uses `psrchive.Archive_load()` for real `.ar`/`.fits` data
 - **Without psrchive**: Generates realistic synthetic data via numpy for development
 
+For macOS development with OrbStack, you can skip installing native bindings locally and run the backend with Docker instead:
+
+```bash
+npm run backend:docker:pull
+PSRCHIVE_BACKEND_RUNTIME=docker npm run dev
+```
+
+`PSRCHIVE_BACKEND_RUNTIME` supports:
+- `local` — default, spawns `python3 -m uvicorn ...`
+- `docker` — runs the backend inside `alex88ridolfi/psrchive_dspsr_presto_ubuntu22.04`
+
 To install psrchive:
 ```bash
 # Via conda (recommended)
@@ -182,6 +224,7 @@ cd psrchive && ./bootstrap && ./configure && make && make install
 |----------|-------------|
 | [docs/architecture.md](docs/architecture.md) | System overview, data flow, state management |
 | [docs/api.md](docs/api.md) | Full REST API reference with request/response schemas |
+| [docs/data-flow.md](docs/data-flow.md) | Local vs Docker runtime, archive-to-chart pipeline, and exact `psrchive` call path |
 | [docs/components.md](docs/components.md) | React component props, behavior, and sub-components |
 | [docs/state.md](docs/state.md) | All Jotai atoms — types, defaults, persistence |
 | [docs/shortcuts.md](docs/shortcuts.md) | Keyboard shortcuts and how to add new ones |
@@ -197,12 +240,13 @@ cd psrchive && ./bootstrap && ./configure && make && make install
 - [x] Keyboard shortcuts + Help panel
 - [x] File labels and context menu
 - [x] Multi-window support
+- [x] Shared command menu across title bar, shortcuts, and macOS menu bar
+- [x] Categorized settings center with updater and backend controls
 - [ ] Interactive RFI zapping (click/box-select on waterfall)
 - [ ] TOA extraction with visual residuals
 - [ ] Polarization calibration wizard
 - [ ] Real-time parameter adjustment (sliders for pam operations)
 - [ ] Batch processing pipeline configuration
-- [ ] Docker packaging for distribution
 
 ## References
 

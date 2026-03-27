@@ -1,76 +1,87 @@
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { useT } from '@/lib/i18n'
-import { settingsOpenAtom, sidebarCollapsedAtom, workspacePathAtom } from '@/lib/settings'
-import type { ViewTab } from '@/lib/store'
-import { activeTabAtom, backendReadyAtom, currentFileAtom, helpOpenAtom } from '@/lib/store'
-import { useAtomValue, useSetAtom } from 'jotai'
-import { ArrowDownCircle } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { type SettingsSection, sidebarCollapsedAtom } from '@/lib/settings'
+import { backendReadyAtom, currentFileAtom } from '@/lib/store'
+import { useAtomValue } from 'jotai'
+import {
+  AppWindow,
+  ArrowDownCircle,
+  ChevronRight,
+  CircleHelp,
+  Eye,
+  FileText,
+  LogOut,
+  Menu,
+  MonitorCog,
+  PanelLeft,
+  Settings2
+} from 'lucide-react'
+import { useState, type ComponentType, type ReactNode } from 'react'
+import type { AppCommandId } from '../../../shared/commands'
 import type { UpdateState } from '../../../shared/update'
 
 interface TitleBarProps {
-  onOpenFile: () => void
-  onOpenFolder: () => void
-  onCheckForUpdates: () => void
+  onRunCommand: (commandId: AppCommandId) => void
+  onOpenSettingsSection: (section: SettingsSection) => void
   updateState: UpdateState | null
-  onUpdate?: () => void
 }
 
-interface MenuItem {
-  label?: string
-  shortcut?: string
-  onClick?: () => void
-  separator?: boolean
-}
-
-interface MenuProps {
+interface CommandMenuItemProps {
   label: string
-  items: MenuItem[]
-  isOpen: boolean
-  onToggle: () => void
+  shortcut?: string
+  onSelect: () => void
+  icon?: ComponentType<{ className?: string }>
+  danger?: boolean
 }
 
-function Menu({ label, items, isOpen, onToggle }: MenuProps) {
+function CommandMenuItem({ label, shortcut, onSelect, icon: Icon, danger = false }: CommandMenuItemProps) {
   return (
-    <div className="relative">
-      <button
-        onClick={onToggle}
-        className={`px-3 py-1 text-xs rounded-md transition-colors no-drag ${
-          isOpen
-            ? 'bg-surface-3 text-text-primary'
-            : 'text-text-secondary hover:bg-surface-2 hover:text-text-primary'
-        }`}
-      >
-        {label}
-      </button>
-      {isOpen && (
-        <div className="absolute top-full left-0 mt-1 w-56 bg-surface-2 border border-border rounded-md shadow-xl py-1 z-50 no-drag">
-          {items.map((item, i) =>
-            item.separator ? (
-              <div key={i} className="h-px bg-border my-1" />
-            ) : (
-              <button
-                key={i}
-                onClick={() => {
-                  item.onClick?.()
-                }}
-                className="w-full flex items-center justify-between px-3 py-1.5 text-xs text-text-secondary hover:bg-surface-3 hover:text-text-primary transition-colors text-left"
-              >
-                <span>{item.label}</span>
-                {item.shortcut && (
-                  <span className="text-[10px] text-text-muted ml-4 tabular-nums">
-                    {item.shortcut}
-                  </span>
-                )}
-              </button>
-            )
-          )}
-        </div>
-      )}
-    </div>
+    <DropdownMenu.Item
+      onSelect={onSelect}
+      className={`group flex cursor-default items-center gap-3 rounded-xl px-3 py-2.5 text-sm outline-hidden transition-colors ${
+        danger
+          ? 'text-danger focus:bg-danger/12'
+          : 'text-text-primary focus:bg-surface-3'
+      }`}
+    >
+      {Icon ? <Icon className="h-4 w-4 shrink-0 text-text-secondary group-focus:text-current" /> : null}
+      <span className="flex-1">{label}</span>
+      {shortcut ? (
+        <span className="text-[11px] uppercase tracking-[0.16em] text-text-muted">
+          {shortcut}
+        </span>
+      ) : null}
+    </DropdownMenu.Item>
   )
 }
 
-function UpdateButton({ updateState, onUpdate }: { updateState: UpdateState | null; onUpdate?: () => void }) {
+interface CommandSubmenuProps {
+  label: string
+  icon: ComponentType<{ className?: string }>
+  children: ReactNode
+}
+
+function CommandSubmenu({ label, icon: Icon, children }: CommandSubmenuProps) {
+  return (
+    <DropdownMenu.Sub>
+      <DropdownMenu.SubTrigger className="group flex cursor-default items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-text-primary outline-hidden transition-colors focus:bg-surface-3">
+        <Icon className="h-4 w-4 shrink-0 text-text-secondary group-focus:text-text-primary" />
+        <span className="flex-1">{label}</span>
+        <ChevronRight className="h-4 w-4 text-text-muted" />
+      </DropdownMenu.SubTrigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.SubContent
+          sideOffset={10}
+          className="z-[220] min-w-[240px] rounded-2xl border border-border bg-surface-1 p-2 shadow-[0_24px_64px_rgba(0,0,0,0.45)]"
+        >
+          {children}
+        </DropdownMenu.SubContent>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Sub>
+  )
+}
+
+function UpdateButton({ updateState, onUpdate }: { updateState: UpdateState | null; onUpdate: () => void }) {
   const [hovered, setHovered] = useState(false)
 
   if (!updateState) {
@@ -114,140 +125,138 @@ function UpdateButton({ updateState, onUpdate }: { updateState: UpdateState | nu
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onClick={onUpdate}
-      className={`no-drag flex items-center gap-1.5 overflow-hidden transition-all duration-300 ease-in-out rounded-full border shrink-0 ${
+      className={`no-drag flex h-3 shrink-0 items-center gap-1.5 overflow-hidden rounded-full border transition-all duration-300 ease-in-out ${
         hovered
-          ? 'bg-success/20 border-success/50 px-2.5 py-0.5 text-success'
-          : 'w-3 h-3 bg-success border-success/60 p-0'
+          ? 'border-success/50 bg-success/20 px-2.5 py-0.5 text-success'
+          : 'h-3 w-3 border-success/60 bg-success p-0'
       }`}
       title={updateState.availableVersion ? `Update ${updateState.availableVersion} available` : 'Update available'}
-      style={{ minWidth: hovered ? 80 : 12, height: 12 }}
+      style={{ minWidth: hovered ? 90 : 12 }}
     >
       {hovered ? (
         <>
-          <ArrowDownCircle className="w-3 h-3 shrink-0" />
-          <span className="text-[10px] font-semibold whitespace-nowrap leading-none">Update</span>
+          <ArrowDownCircle className="h-3 w-3 shrink-0" />
+          <span className="whitespace-nowrap text-[10px] font-semibold leading-none">Update</span>
         </>
       ) : null}
     </button>
   )
 }
 
-export function TitleBar({ onOpenFile, onOpenFolder, onCheckForUpdates, updateState, onUpdate }: TitleBarProps) {
+export function TitleBar({ onRunCommand, onOpenSettingsSection, updateState }: TitleBarProps) {
   const t = useT()
   const backendReady = useAtomValue(backendReadyAtom)
   const currentFile = useAtomValue(currentFileAtom)
-  const setCurrentFile = useSetAtom(currentFileAtom)
-  const setActiveTab = useSetAtom(activeTabAtom)
-  const setHelpOpen = useSetAtom(helpOpenAtom)
-  const setSettingsOpen = useSetAtom(settingsOpenAtom)
   const sidebarCollapsed = useAtomValue(sidebarCollapsedAtom)
-  const setSidebarCollapsed = useSetAtom(sidebarCollapsedAtom)
-  const setWorkspacePath = useSetAtom(workspacePathAtom)
-
-  const [openMenu, setOpenMenu] = useState<string | null>(null)
-  const menuRef = useRef<HTMLDivElement>(null)
 
   const filename = currentFile?.split('/').pop() ?? t('app.title')
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setOpenMenu(null)
-      }
-    }
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpenMenu(null)
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    document.addEventListener('keydown', handleKeyDown)
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-      document.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [])
-
-  const handleOpenFolderAction = async () => {
-    const path = await window.electron.openDirectory()
-    if (path) {
-      setWorkspacePath(path)
-      onOpenFolder()
-    }
-    setOpenMenu(null)
-  }
-
-  const menus = [
-    {
-      id: 'file',
-      label: 'File',
-      items: [
-        { label: 'Open File', shortcut: '⌘O', onClick: () => { onOpenFile(); setOpenMenu(null) } },
-        { label: 'Open Workspace', shortcut: '⌘⇧O', onClick: handleOpenFolderAction },
-        { label: 'Close File', shortcut: '⌘W', onClick: () => { setCurrentFile(null); setOpenMenu(null) } },
-        { label: 'Save Image', shortcut: '⌘S', onClick: () => setOpenMenu(null) },
-        { label: 'Save Archive', shortcut: '⌘⇧S', onClick: () => setOpenMenu(null) },
-        { separator: true },
-        { label: 'New Window', shortcut: '⌘N', onClick: () => { window.electron.newWindow(); setOpenMenu(null) } },
-      ],
-    },
-    {
-      id: 'view',
-      label: 'View',
-      items: [
-        { label: 'Profile', shortcut: '⌘1', onClick: () => { setActiveTab('profile' as ViewTab); setOpenMenu(null) } },
-        { label: 'Freq × Phase', shortcut: '⌘2', onClick: () => { setActiveTab('waterfall' as ViewTab); setOpenMenu(null) } },
-        { label: 'Time × Phase', shortcut: '⌘3', onClick: () => { setActiveTab('time-phase' as ViewTab); setOpenMenu(null) } },
-        { label: 'Bandpass', shortcut: '⌘4', onClick: () => { setActiveTab('bandpass' as ViewTab); setOpenMenu(null) } },
-        { separator: true },
-        { label: 'Toggle Sidebar', shortcut: '⌘B', onClick: () => { setSidebarCollapsed(!sidebarCollapsed); setOpenMenu(null) } },
-      ],
-    },
-    {
-      id: 'help',
-      label: 'Help',
-      items: [
-        { label: 'Keyboard Shortcuts', shortcut: '⌘/', onClick: () => { setHelpOpen(true); setOpenMenu(null) } },
-        { label: 'Check for Updates', onClick: () => { onCheckForUpdates(); setOpenMenu(null) } },
-        { separator: true },
-        { label: 'About', onClick: () => { setSettingsOpen(true); setOpenMenu(null) } },
-      ],
-    },
-  ]
-
   return (
-    <div className="drag-region flex items-center h-[47px] bg-surface-1 border-b border-border shrink-0 select-none">
-      {/* Reserve the native macOS traffic-light area so menus start after system controls. */}
+    <div className="drag-region flex h-[47px] shrink-0 select-none items-center border-b border-border bg-surface-1">
       <div className="titlebar-traffic-space shrink-0" aria-hidden="true" />
 
-      {/* Menus */}
-      <div className="flex items-center gap-0.5 no-drag" ref={menuRef}>
-        {menus.map((menu) => (
-          <Menu
-            key={menu.id}
-            label={menu.label}
-            isOpen={openMenu === menu.id}
-            onToggle={() => setOpenMenu(openMenu === menu.id ? null : menu.id)}
-            items={menu.items}
-          />
-        ))}
+      <div className="no-drag flex items-center gap-2 pl-1">
+        <button
+          type="button"
+          onClick={() => onRunCommand('toggle-sidebar')}
+          title={sidebarCollapsed ? 'Toggle Sidebar' : 'Toggle Sidebar'}
+          className="flex h-8 w-8 items-center justify-center rounded-xl border border-border/70 bg-surface-2 text-text-secondary transition-colors hover:border-border-hover hover:bg-surface-3 hover:text-text-primary"
+        >
+          <PanelLeft className="h-4 w-4" />
+        </button>
+
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger asChild>
+            <button
+              type="button"
+              title="Open command menu"
+              className="flex h-8 w-8 items-center justify-center rounded-xl border border-border/70 bg-surface-2 text-text-secondary transition-colors hover:border-border-hover hover:bg-surface-3 hover:text-text-primary"
+            >
+              <Menu className="h-4 w-4" />
+            </button>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content
+              sideOffset={10}
+              align="start"
+              className="z-[220] min-w-[270px] rounded-[22px] border border-border bg-surface-1 p-2 shadow-[0_28px_90px_rgba(0,0,0,0.5)]"
+            >
+              <CommandMenuItem
+                label="New Window"
+                shortcut="⌘N"
+                icon={AppWindow}
+                onSelect={() => onRunCommand('new-window')}
+              />
+
+              <DropdownMenu.Separator className="my-2 h-px bg-border" />
+
+              <CommandSubmenu label="File" icon={FileText}>
+                <CommandMenuItem label="Open File" shortcut="⌘O" onSelect={() => onRunCommand('open-file')} />
+                <CommandMenuItem label="Open Workspace" shortcut="⌘⇧O" onSelect={() => onRunCommand('open-workspace')} />
+                <CommandMenuItem label="Close File" shortcut="⌘W" onSelect={() => onRunCommand('close-file')} />
+                <DropdownMenu.Separator className="my-2 h-px bg-border" />
+                <CommandMenuItem label="Save Image" shortcut="⌘S" onSelect={() => onRunCommand('save-image')} />
+                <CommandMenuItem label="Save Archive" shortcut="⌘⇧S" onSelect={() => onRunCommand('save-archive')} />
+              </CommandSubmenu>
+
+              <CommandSubmenu label="View" icon={Eye}>
+                <CommandMenuItem label="Profile" shortcut="⌘1" onSelect={() => onRunCommand('view-profile')} />
+                <CommandMenuItem label="Freq × Phase" shortcut="⌘2" onSelect={() => onRunCommand('view-waterfall')} />
+                <CommandMenuItem label="Time × Phase" shortcut="⌘3" onSelect={() => onRunCommand('view-time-phase')} />
+                <CommandMenuItem label="Bandpass" shortcut="⌘4" onSelect={() => onRunCommand('view-bandpass')} />
+                <CommandMenuItem label="PSRCAT" shortcut="⌘5" onSelect={() => onRunCommand('view-psrcat')} />
+              </CommandSubmenu>
+
+              <CommandSubmenu label="Window" icon={MonitorCog}>
+                <CommandMenuItem label="Toggle Sidebar" shortcut="⌘B" onSelect={() => onRunCommand('toggle-sidebar')} />
+                <CommandMenuItem label="Minimize Window" onSelect={() => onRunCommand('window-minimize')} />
+                <CommandMenuItem label="Toggle Full Screen" onSelect={() => onRunCommand('window-toggle-full-screen')} />
+              </CommandSubmenu>
+
+              <DropdownMenu.Separator className="my-2 h-px bg-border" />
+
+              <CommandMenuItem
+                label="Settings"
+                shortcut="⌘,"
+                icon={Settings2}
+                onSelect={() => onOpenSettingsSection('app')}
+              />
+
+              <CommandSubmenu label="Help" icon={CircleHelp}>
+                <CommandMenuItem label="Keyboard Shortcuts" shortcut="⌘/" onSelect={() => onRunCommand('open-help')} />
+                <CommandMenuItem label="Check for Updates" onSelect={() => onRunCommand('check-for-updates')} />
+                <CommandMenuItem label="About" onSelect={() => onOpenSettingsSection('about')} />
+              </CommandSubmenu>
+
+              <DropdownMenu.Separator className="my-2 h-px bg-border" />
+
+              <CommandMenuItem
+                label="Quit"
+                shortcut="⌘Q"
+                icon={LogOut}
+                danger
+                onSelect={() => onRunCommand('app-quit')}
+              />
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
       </div>
 
-      {/* Center: Title/Filename */}
-      <div className="flex-1 flex justify-center overflow-hidden px-4 pointer-events-none">
-        <span className="text-xs font-medium text-text-secondary truncate">
+      <div className="pointer-events-none flex flex-1 justify-center overflow-hidden px-4">
+        <span className="truncate text-xs font-medium text-text-secondary">
           {filename}
         </span>
       </div>
 
-      {/* Right side: Backend Status */}
-      <div className="flex items-center gap-3 px-4 no-drag shrink-0">
-        <UpdateButton updateState={updateState} onUpdate={onUpdate} />
+      <div className="no-drag flex shrink-0 items-center gap-3 px-4">
+        <UpdateButton updateState={updateState} onUpdate={() => onRunCommand('update-action')} />
         <div className="flex items-center gap-1.5">
           <div
-            className={`w-1.5 h-1.5 rounded-full ${
-              backendReady ? 'bg-success' : 'bg-danger animate-pulse'
+            className={`h-1.5 w-1.5 rounded-full ${
+              backendReady ? 'bg-success' : 'animate-pulse bg-danger'
             }`}
           />
-          <span className="text-[10px] font-medium text-text-muted uppercase tracking-wider">
+          <span className="text-[10px] font-medium uppercase tracking-wider text-text-muted">
             {backendReady ? 'Live' : 'Offline'}
           </span>
         </div>

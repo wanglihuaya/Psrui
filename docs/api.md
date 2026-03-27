@@ -1,5 +1,7 @@
 # Backend API Reference
 
+中文版本: [api.zh.md](api.zh.md)
+
 Base URL: `http://127.0.0.1:8787` (configurable via Settings → Backend Port)
 
 All endpoints live under the `/api` prefix. Errors return HTTP 500 with a JSON body `{ "detail": "<message>" }`.

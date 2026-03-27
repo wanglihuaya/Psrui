@@ -1,5 +1,7 @@
 # Electron Layer
 
+中文版本: [electron.zh.md](electron.zh.md)
+
 ## Main process (`src/main/index.ts`)
 
 Entry point for the Electron main process. Responsibilities:
@@ -8,6 +10,8 @@ Entry point for the Electron main process. Responsibilities:
 - Creates `BrowserWindow` instances
 - Registers all IPC handlers
 - Manages multi-window state via a `Set<BrowserWindow>`
+- Builds the native macOS application menu and dev-only `Debug` menu
+- Dispatches shared app commands to the focused renderer via `app:command`
 
 ### Window configuration
 
@@ -31,6 +35,46 @@ In development, the renderer loads from `ELECTRON_RENDERER_URL` (Vite dev server
 - Downloads are manual (`autoDownload = false`): the renderer checks first, then explicitly triggers `downloadUpdate()`
 - After download completes, the renderer triggers `installUpdate()`, which calls `quitAndInstall()`
 
+### Native application menu
+
+`Menu.buildFromTemplate()` + `Menu.setApplicationMenu()` are configured at startup.
+
+On macOS the top-level structure is:
+
+- **App** (`label: app.getName()`)
+  - About
+  - Check for Updates
+  - Settings / Preferences… (`Cmd+,`)
+  - services / hide / hide others / unhide / quit
+- **File**
+  - New Window
+  - Open File
+  - Open Workspace
+  - Close File
+  - Save Image
+  - Save Archive
+- **View**
+  - Profile
+  - Freq × Phase
+  - Time × Phase
+  - Bandpass
+  - PSRCAT
+  - Toggle Sidebar
+  - Toggle Full Screen
+- **Window**
+  - Minimize
+  - Zoom
+  - Bring All to Front
+- **Help**
+  - Keyboard Shortcuts
+  - About
+- **Debug** (development only)
+  - Reload
+  - Force Reload
+  - Toggle Developer Tools
+
+Renderer-owned actions are forwarded with `webContents.send('app:command', commandId)`. Main-owned actions such as creating a new window, minimizing, toggling full screen, and quitting run directly in the main process.
+
 ### IPC handlers
 
 | Channel | Direction | Description |
@@ -40,14 +84,19 @@ In development, the renderer loads from `ELECTRON_RENDERER_URL` (Vite dev server
 | `dialog:saveFile` | invoke | `dialog.showSaveDialog` filtered to PNG / SVG |
 | `backend:port` | invoke | Returns `8787` |
 | `backend:status` | invoke | Returns `backend.isRunning()` |
+| `backend:runtime` | invoke | Returns `'local'` or `'docker'` |
 | `backend:restart` | invoke | Calls `backend.restart()` |
 | `window:new` | invoke | Calls `createWindow(filePath?)` |
+| `window:minimize` | invoke | Minimizes the current BrowserWindow |
+| `window:toggleFullScreen` | invoke | Toggles fullscreen on the sender window |
+| `app:quit` | invoke | Calls `app.quit()` |
 | `updates:getState` | invoke | Returns the latest updater state snapshot |
 | `updates:check` | invoke | Starts an update check |
 | `updates:download` | invoke | Downloads the available update |
 | `updates:install` | invoke | Restarts and installs a downloaded update |
 | `shell:showItemInFolder` | invoke | `shell.showItemInFolder(path)` |
 | `file:open` | send (main → renderer) | Sent when a window is opened with a pre-selected file path |
+| `app:command` | send (main → renderer) | Native menu → focused renderer command dispatch |
 | `updates:state` | send (main → renderer) | Broadcasts updater state changes to every open window |
 
 ### App lifecycle
@@ -73,20 +122,48 @@ before-quit
 
 ## Backend process manager (`src/main/backend.ts`)
 
-`BackendProcess` class manages the uvicorn child process.
+`BackendProcess` manages either a host uvicorn process or a Docker-backed uvicorn container.
+
+### Runtime selection
+
+Runtime is selected from `PSRCHIVE_BACKEND_RUNTIME`:
+
+- `local` — default host Python runtime
+- `docker` — Docker / OrbStack runtime using `alex88ridolfi/psrchive_dspsr_presto_ubuntu22.04`
+
+Docker mode mounts:
+
+- the backend resource directory to `/workspace/backend`
+- `/Users`
+- `/Volumes`
+- `/private`
+- `/tmp`
+
+That keeps absolute archive paths usable inside the container, so the renderer can continue sending host file paths unchanged.
 
 ### `start()`
 
-Spawns:
+Local mode spawns:
 ```
 python3 -m uvicorn app.main:app --host 127.0.0.1 --port 8787
+```
+
+Docker mode spawns the Docker CLI and runs a container roughly equivalent to:
+
+```bash
+docker run --rm \
+  --name psrchive-viewer-backend-8787 \
+  -p 127.0.0.1:8787:8787 \
+  -v /path/to/backend:/workspace/backend \
+  alex88ridolfi/psrchive_dspsr_presto_ubuntu22.04 \
+  /bin/bash -lc '(python3 -c "import fastapi,uvicorn,numpy" >/dev/null 2>&1 || python3 -m pip install -r requirements.txt) && exec python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8787'
 ```
 
 - `cwd`: `backend/` (dev) or `process.resourcesPath/backend` (production)
 - `env`: inherits process env + `PYTHONUNBUFFERED=1`
 - stdout/stderr piped and logged to the main process console as `[backend]`
 
-Waits for readiness by polling `GET http://127.0.0.1:8787/api/health` every 300 ms, starting after an initial 500 ms delay. Times out after 15 seconds.
+Waits for readiness by polling `GET http://127.0.0.1:8787/api/health` every 400 ms. Docker mode gets a longer startup window because the image may need to install Python packages on first boot.
 
 ### `stop()`
 
@@ -110,17 +187,24 @@ interface ElectronAPI {
   showInFolder: (path: string) => Promise<void>
   getBackendPort: () => Promise<number>
   getBackendStatus: () => Promise<boolean>
+  getBackendRuntime: () => Promise<BackendRuntime>
   restartBackend: () => Promise<boolean>
   newWindow: (filePath?: string) => Promise<void>
+  minimizeWindow: () => Promise<void>
+  toggleFullScreen: () => Promise<void>
+  quitApp: () => Promise<void>
   getUpdateState: () => Promise<UpdateState | null>
   checkForUpdates: () => Promise<UpdateState | null>
   downloadUpdate: () => Promise<UpdateState | null>
   installUpdate: () => Promise<UpdateState | null>
   onFileOpen: (callback: (path: string) => void) => void
+  onAppCommand: (callback: (commandId: AppCommandId) => void) => () => void
   onUpdateState: (callback: (state: UpdateState) => void) => () => void
 }
 ```
 
 `onFileOpen` registers a persistent `ipcRenderer.on` listener for the `file:open` event, which the main process sends when a window is created with a pre-loaded file path.
+
+`onAppCommand` subscribes the renderer to native-menu events so the custom title bar menu, global shortcuts, and the macOS menu bar can all reuse the same command handler map in `App.tsx`.
 
 `onUpdateState` subscribes the renderer to updater status broadcasts so the UI can move through `checking → available → downloading → downloaded`.

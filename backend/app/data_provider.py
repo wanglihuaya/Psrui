@@ -230,6 +230,7 @@ class PsrchiveProvider(DataProvider):
     def get_metadata(self, path: str) -> dict[str, Any]:
         ar = self._psrchive.Archive_load(path)
         ar.remove_baseline()
+        first_integration = ar.get_Integration(0)
         return {
             "filename": os.path.basename(path),
             "source": ar.get_source(),
@@ -243,7 +244,7 @@ class PsrchiveProvider(DataProvider):
             "nsubint": int(ar.get_nsubint()),
             "nbin": int(ar.get_nbin()),
             "npol": int(ar.get_npol()),
-            "period": float(ar.integration(0).get_folding_period()),
+            "period": float(first_integration.get_folding_period()),
             "dm": float(ar.get_dispersion_measure()),
             "duration": float(ar.integration_length()),
         }

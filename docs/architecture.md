@@ -1,5 +1,7 @@
 # Architecture
 
+中文版本: [architecture.zh.md](architecture.zh.md)
+
 PSRCHIVE Viewer is a desktop application built as three cooperating layers:
 
 ```
@@ -32,7 +34,7 @@ PSRCHIVE Viewer is a desktop application built as three cooperating layers:
 ## Communication flows
 
 ### Startup
-1. Electron main process spawns `python3 -m uvicorn app.main:app --port 8787`
+1. Electron main process spawns either host `python3 -m uvicorn app.main:app --port 8787` or a Docker container when `PSRCHIVE_BACKEND_RUNTIME=docker`
 2. `BackendProcess.waitForReady()` polls `GET /api/health` every 300 ms (15 s timeout)
 3. Once healthy, `createWindow()` opens the renderer; renderer polls `/api/health` independently and sets `backendReadyAtom = true`
 
@@ -56,6 +58,7 @@ All IPC uses `contextBridge`; the renderer calls `window.electron.*`, which maps
 | `showInFolder(path)` | `shell:showItemInFolder` | `shell.showItemInFolder` |
 | `getBackendPort()` | `backend:port` | returns `8787` |
 | `getBackendStatus()` | `backend:status` | `backend.isRunning()` |
+| `getBackendRuntime()` | `backend:runtime` | returns `'local'` or `'docker'` |
 | `restartBackend()` | `backend:restart` | `backend.restart()` |
 | `newWindow(path?)` | `window:new` | `createWindow(path)` |
 | `onFileOpen(cb)` | `file:open` (listen) | sent by main on file association |
@@ -82,3 +85,5 @@ All global state lives in Jotai atoms (no Redux, no Context API).
 **Persisted state** (`lib/settings.ts`): written to `localStorage` via `atomWithStorage`.
 
 See [state.md](state.md) for a full atom reference.
+
+For the full local-vs-Docker runtime story and the archive-to-Plotly pipeline, see [data-flow.md](data-flow.md).

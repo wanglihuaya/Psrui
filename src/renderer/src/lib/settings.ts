@@ -30,6 +30,8 @@ const DEFAULT_SETTINGS: AppSettings = {
 export const settingsAtom = atomWithStorage<AppSettings>('psrchive-settings', DEFAULT_SETTINGS)
 export const recentFilesAtom = atomWithStorage<string[]>('psrchive-recent-files', [])
 export const settingsOpenAtom = atom(false)
+export type SettingsSection = 'app' | 'appearance' | 'workspace' | 'backend' | 'shortcuts' | 'about'
+export const settingsSectionAtom = atom<SettingsSection>('app')
 
 // draft settings atom for the settings panel — only committed on save
 export const draftSettingsAtom = atom<AppSettings | null>(null)
