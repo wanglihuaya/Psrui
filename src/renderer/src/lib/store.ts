@@ -1,5 +1,7 @@
 import { atom } from 'jotai'
 import type { ArchiveMetadata, ProfileData, WaterfallData, TimePhaseData, BandpassData, FileTreeNode } from './api'
+import type { ProcessingCapabilities, ProcessingRecipe, ToaResult } from '../../../shared/processing'
+import { DEFAULT_PROCESSING_RECIPE } from '../../../shared/processing'
 
 export const currentFileAtom = atom<string | null>(null)
 export const metadataAtom = atom<ArchiveMetadata | null>(null)
@@ -35,3 +37,11 @@ export const splitLayoutAtom = atom<SplitLayout>('single')
 // which panels are in each split slot [slot0, slot1, slot2, slot3]
 export type SplitSlot = ViewTab
 export const splitSlotsAtom = atom<SplitSlot[]>(['profile', 'waterfall', 'time-phase', 'bandpass'])
+
+export const currentSessionIdAtom = atom<string | null>(null)
+export const processingCapabilitiesAtom = atom<ProcessingCapabilities | null>(null)
+export const processingRecipeAtom = atom<ProcessingRecipe>(DEFAULT_PROCESSING_RECIPE)
+export const processingHistoryAtom = atom<ProcessingRecipe[]>([])
+export const processingRedoHistoryAtom = atom<ProcessingRecipe[]>([])
+export const processingInspectorOpenAtom = atom(false)
+export const toaResultAtom = atom<ToaResult | null>(null)

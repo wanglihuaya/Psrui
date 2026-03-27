@@ -3,6 +3,7 @@ import { useAtom, useSetAtom, useAtomValue } from 'jotai'
 import { api } from '@/lib/api'
 import {
   backendReadyAtom,
+  currentSessionIdAtom,
   currentFileAtom,
   metadataAtom,
   profileDataAtom,
@@ -15,7 +16,12 @@ import {
   activeTabAtom,
   helpOpenAtom,
   helpSectionAtom,
+  processingCapabilitiesAtom,
+  processingHistoryAtom,
+  processingRecipeAtom,
+  processingRedoHistoryAtom,
   psrcatOpenAtom,
+  toaResultAtom,
   type HelpSection
 } from '@/lib/store'
 import { TitleBar } from '@/components/TitleBar'
@@ -25,6 +31,7 @@ import { StatusBar } from '@/components/StatusBar'
 import { SettingsPanel, applyTheme } from '@/components/SettingsPanel'
 import { HelpPanel } from '@/components/HelpPanel'
 import { PsrcatPanel } from '@/components/PsrcatPanel'
+import { ProcessingInspector } from '@/components/ProcessingInspector'
 import {
   settingsAtom,
   settingsOpenAtom,
@@ -36,11 +43,28 @@ import {
 import { useShortcuts, type ShortcutCommandId } from '@/lib/shortcuts'
 import type { BackendRuntime } from '../../shared/backend'
 import type { AppCommandId } from '../../shared/commands'
+import { cloneProcessingRecipe, DEFAULT_PROCESSING_RECIPE, type ProcessingRecipe, type ToaRequest } from '../../shared/processing'
 import type { UpdateState } from '../../shared/update'
+
+type RecipeUpdate = ProcessingRecipe | ((prev: ProcessingRecipe) => ProcessingRecipe)
+
+function buildProcessedArchiveName(filepath: string, extension: string): string {
+  const filename = filepath.split(/[/\\]/).pop() ?? 'archive.ar'
+  const dotIndex = filename.lastIndexOf('.')
+  const stem = dotIndex > 0 ? filename.slice(0, dotIndex) : filename
+  const suffix = dotIndex > 0 ? filename.slice(dotIndex) : '.ar'
+  const safeExtension = extension.trim().replace(/^\.+/, '') || 'processed'
+  return `${stem}.${safeExtension}${suffix}`
+}
 
 export default function App() {
   const [backendReady, setBackendReady] = useAtom(backendReadyAtom)
   const [currentFile, setCurrentFile] = useAtom(currentFileAtom)
+  const [currentSessionId, setCurrentSessionId] = useAtom(currentSessionIdAtom)
+  const setProcessingCapabilities = useSetAtom(processingCapabilitiesAtom)
+  const [processingRecipe, setProcessingRecipe] = useAtom(processingRecipeAtom)
+  const [processingHistory, setProcessingHistory] = useAtom(processingHistoryAtom)
+  const [processingRedoHistory, setProcessingRedoHistory] = useAtom(processingRedoHistoryAtom)
   const settings = useAtomValue(settingsAtom)
   const setMetadata = useSetAtom(metadataAtom)
   const setProfile = useSetAtom(profileDataAtom)
@@ -58,6 +82,7 @@ export default function App() {
   const setSidebarCollapsed = useSetAtom(sidebarCollapsedAtom)
   const setWorkspacePath = useSetAtom(workspacePathAtom)
   const setPsrcatOpen = useSetAtom(psrcatOpenAtom)
+  const setToaResult = useSetAtom(toaResultAtom)
   const [updateState, setUpdateState] = useState<UpdateState | null>(null)
   const [backendRuntime, setBackendRuntime] = useState<BackendRuntime>('local')
 
@@ -73,11 +98,16 @@ export default function App() {
 
   const clearCurrentFile = () => {
     setCurrentFile(null)
+    setCurrentSessionId(null)
     setMetadata(null)
     setProfile(null)
     setWaterfall(null)
     setTimePhase(null)
     setBandpass(null)
+    setProcessingRecipe(cloneProcessingRecipe(DEFAULT_PROCESSING_RECIPE))
+    setProcessingHistory([])
+    setProcessingRedoHistory([])
+    setToaResult(null)
     setError(null)
   }
 
@@ -137,6 +167,35 @@ export default function App() {
   }, [])
 
   useEffect(() => {
+    if (!backendReady) {
+      setProcessingCapabilities(null)
+      return
+    }
+
+    let cancelled = false
+
+    const loadCapabilities = async () => {
+      try {
+        const capabilities = await api.getCapabilities()
+        if (!cancelled) {
+          setProcessingCapabilities(capabilities)
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setProcessingCapabilities(null)
+          setError(error instanceof Error ? error.message : 'Failed to load processing capabilities')
+        }
+      }
+    }
+
+    void loadCapabilities()
+
+    return () => {
+      cancelled = true
+    }
+  }, [backendReady, setProcessingCapabilities, setError])
+
+  useEffect(() => {
     let mounted = true
     let cleanup = () => {}
 
@@ -160,45 +219,103 @@ export default function App() {
     }
   }, [])
 
-  // load archive data when current file changes
-  useEffect(() => {
-    if (!currentFile || !backendReady) return
-    let cancelled = false
+  const loadSessionPreview = async (sessionId: string) => {
+    setLoading(true)
+    setError(null)
 
-    const load = async () => {
+    try {
+      const results = await Promise.allSettled([
+        api.getSessionMetadata(sessionId),
+        api.getSessionProfile(sessionId),
+        api.getSessionWaterfall(sessionId),
+        api.getSessionTimePhase(sessionId),
+        api.getSessionBandpass(sessionId)
+      ])
+
+      const [meta, profile, waterfall, timePhase, bandpass] = results
+      if (meta.status === 'fulfilled') setMetadata(meta.value)
+      if (profile.status === 'fulfilled') setProfile(profile.value)
+      if (waterfall.status === 'fulfilled') setWaterfall(waterfall.value)
+      if (timePhase.status === 'fulfilled') setTimePhase(timePhase.value)
+      if (bandpass.status === 'fulfilled') setBandpass(bandpass.value)
+
+      if (meta.status === 'rejected') {
+        throw meta.reason
+      }
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to load processing preview')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!currentFile || !backendReady) {
+      if (!currentFile) {
+        setCurrentSessionId(null)
+      }
+      return
+    }
+
+    let cancelled = false
+    let createdSessionId: string | null = null
+
+    const initializeSession = async () => {
       setLoading(true)
       setError(null)
-      try {
-        const results = await Promise.allSettled([
-          api.loadArchive(currentFile),
-          api.getProfile(currentFile),
-          api.getWaterfall(currentFile),
-          api.getTimePhase(currentFile),
-          api.getBandpass(currentFile)
-        ])
-        if (cancelled) return
+      setToaResult(null)
+      setProcessingRecipe(cloneProcessingRecipe(DEFAULT_PROCESSING_RECIPE))
+      setProcessingHistory([])
+      setProcessingRedoHistory([])
 
-        const [meta, profile, waterfall, timePhase, bandpass] = results
-        if (meta.status === 'fulfilled') setMetadata(meta.value)
-        if (profile.status === 'fulfilled') setProfile(profile.value)
-        if (waterfall.status === 'fulfilled') setWaterfall(waterfall.value)
-        if (timePhase.status === 'fulfilled') setTimePhase(timePhase.value)
-        if (bandpass.status === 'fulfilled') setBandpass(bandpass.value)
-        if (meta.status === 'rejected') throw meta.reason
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load archive')
-      } finally {
-        if (!cancelled) setLoading(false)
+      try {
+        const session = await api.createSession(currentFile)
+        createdSessionId = session.id
+
+        if (cancelled) {
+          await api.deleteSession(session.id)
+          return
+        }
+
+        setCurrentSessionId(session.id)
+        setProcessingRecipe(cloneProcessingRecipe(session.recipe))
+        await loadSessionPreview(session.id)
+      } catch (error) {
+        if (!cancelled) {
+          setError(error instanceof Error ? error.message : 'Failed to create processing session')
+          setLoading(false)
+        }
       }
     }
 
-    load()
-    return () => { cancelled = true }
-  }, [currentFile, backendReady, setMetadata, setProfile, setWaterfall, setTimePhase, setBandpass, setLoading, setError])
+    void initializeSession()
+
+    return () => {
+      cancelled = true
+      if (createdSessionId) {
+        void api.deleteSession(createdSessionId)
+      }
+      setCurrentSessionId(null)
+      setToaResult(null)
+      setProcessingRecipe(cloneProcessingRecipe(DEFAULT_PROCESSING_RECIPE))
+      setProcessingHistory([])
+      setProcessingRedoHistory([])
+    }
+  }, [
+    currentFile,
+    backendReady,
+    setCurrentSessionId,
+    setError,
+    setLoading,
+    setProcessingHistory,
+    setProcessingRecipe,
+    setProcessingRedoHistory,
+    setToaResult
+  ])
 
   const handleOpenFile = async () => {
     try {
-      const files = await window.electron.openFile()
+      const files = await window.electron.openFile('archive')
       if (files.length > 0) {
         setOpenFiles(prev => Array.from(new Set([...prev, ...files])))
         setCurrentFile(files[0])
@@ -223,8 +340,95 @@ export default function App() {
     setError('Save Image is not implemented yet.')
   }
 
-  const handleSaveArchive = () => {
-    setError('Save Archive is not implemented yet.')
+  const handleSaveArchive = async () => {
+    if (!currentFile || !currentSessionId) {
+      setError('Open an archive first before exporting a processed copy.')
+      return
+    }
+
+    const defaultName = buildProcessedArchiveName(currentFile, processingRecipe.output.archiveExtension)
+    const outputPath = await window.electron.saveFile(defaultName, 'archive')
+
+    if (!outputPath) {
+      return
+    }
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      await api.exportSessionArchive(currentSessionId, outputPath)
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to export processed archive')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const commitProcessingRecipe = async (
+    update: RecipeUpdate,
+    options: {
+      pushHistory?: boolean
+      resetToa?: boolean
+      preserveRedo?: boolean
+    } = {}
+  ) => {
+    if (!currentSessionId) {
+      return
+    }
+
+    const nextRecipe = cloneProcessingRecipe(
+      typeof update === 'function' ? update(processingRecipe) : update
+    )
+    const shouldPushHistory = options.pushHistory ?? true
+    const shouldResetToa = options.resetToa ?? true
+    const shouldPreserveRedo = options.preserveRedo ?? false
+
+    if (shouldPushHistory) {
+      setProcessingHistory((prev) => [...prev.slice(-49), cloneProcessingRecipe(processingRecipe)])
+    }
+
+    if (!shouldPreserveRedo) {
+      setProcessingRedoHistory([])
+    }
+
+    if (shouldResetToa) {
+      setToaResult(null)
+    }
+
+    setError(null)
+
+    try {
+      const session = await api.updateSessionRecipe(currentSessionId, nextRecipe)
+      setProcessingRecipe(cloneProcessingRecipe(session.recipe))
+      await loadSessionPreview(currentSessionId)
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to update processing recipe')
+    }
+  }
+
+  const handleRunToa = async (request: ToaRequest) => {
+    if (!currentSessionId) {
+      setError('Open an archive first before running TOA extraction.')
+      return
+    }
+
+    setLoading(true)
+    setError(null)
+    setProcessingRecipe((prev) => ({
+      ...cloneProcessingRecipe(prev),
+      toa: { ...request },
+      output: { ...prev.output, toaFormat: request.format }
+    }))
+
+    try {
+      const result = await api.runSessionToa(currentSessionId, request)
+      setToaResult(result)
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to run TOA extraction')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleCheckForUpdates = async () => {
@@ -265,6 +469,36 @@ export default function App() {
     }
   }
 
+  const handleUndo = async () => {
+    if (!currentSessionId || processingHistory.length === 0) {
+      return
+    }
+
+    const previousRecipe = cloneProcessingRecipe(processingHistory[processingHistory.length - 1])
+    setProcessingHistory((prev) => prev.slice(0, -1))
+    setProcessingRedoHistory((prev) => [...prev, cloneProcessingRecipe(processingRecipe)])
+    await commitProcessingRecipe(previousRecipe, {
+      pushHistory: false,
+      preserveRedo: true,
+      resetToa: true
+    })
+  }
+
+  const handleRedo = async () => {
+    if (!currentSessionId || processingRedoHistory.length === 0) {
+      return
+    }
+
+    const nextRecipe = cloneProcessingRecipe(processingRedoHistory[processingRedoHistory.length - 1])
+    setProcessingRedoHistory((prev) => prev.slice(0, -1))
+    setProcessingHistory((prev) => [...prev.slice(-49), cloneProcessingRecipe(processingRecipe)])
+    await commitProcessingRecipe(nextRecipe, {
+      pushHistory: false,
+      preserveRedo: true,
+      resetToa: true
+    })
+  }
+
   const commandHandlers: Partial<Record<ShortcutCommandId, () => void | Promise<void>>> = {
     'new-window': () => window.electron.newWindow(),
     'open-file': handleOpenFile,
@@ -288,8 +522,8 @@ export default function App() {
     'debug-reload': () => window.location.reload(),
     'debug-force-reload': () => window.location.reload(),
     'debug-toggle-devtools': () => undefined,
-    undo: () => console.log('Undo...'),
-    redo: () => console.log('Redo...')
+    undo: handleUndo,
+    redo: handleRedo
   }
 
   const runCommand = useEffectEvent(async (commandId: AppCommandId) => {
@@ -325,7 +559,16 @@ export default function App() {
       <div className="flex flex-1 overflow-hidden relative">
         <Sidebar onOpenFile={handleOpenFile} onOpenFolder={handleOpenFolder} />
         <div className="relative flex-1 overflow-hidden flex flex-col">
-          <MainPanel />
+          <div className="flex min-h-0 flex-1 overflow-hidden">
+            <MainPanel onApplyProcessingRecipe={commitProcessingRecipe} />
+            <ProcessingInspector
+              currentFile={currentFile}
+              backendReady={backendReady}
+              onApplyProcessingRecipe={commitProcessingRecipe}
+              onRunToa={handleRunToa}
+              onSaveArchive={handleSaveArchive}
+            />
+          </div>
           <PsrcatPanel />
         </div>
       </div>

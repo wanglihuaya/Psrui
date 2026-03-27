@@ -4,9 +4,9 @@ import type { AppCommandId } from '../shared/commands'
 import type { UpdateState } from '../shared/update'
 
 export type ElectronAPI = {
-  openFile: () => Promise<string[]>
+  openFile: (kind?: 'archive' | 'calibration' | 'text' | 'any') => Promise<string[]>
   openDirectory: () => Promise<string | null>
-  saveFile: (defaultName: string) => Promise<string | null>
+  saveFile: (defaultName: string, kind?: 'image' | 'archive' | 'text' | 'any') => Promise<string | null>
   showInFolder: (path: string) => Promise<void>
   getBackendPort: () => Promise<number>
   getBackendStatus: () => Promise<boolean>
@@ -26,9 +26,9 @@ export type ElectronAPI = {
 }
 
 const api: ElectronAPI = {
-  openFile: () => ipcRenderer.invoke('dialog:openFile'),
+  openFile: (kind = 'archive') => ipcRenderer.invoke('dialog:openFile', kind),
   openDirectory: () => ipcRenderer.invoke('dialog:openDirectory'),
-  saveFile: (defaultName: string) => ipcRenderer.invoke('dialog:saveFile', defaultName),
+  saveFile: (defaultName: string, kind = 'image') => ipcRenderer.invoke('dialog:saveFile', defaultName, kind),
   showInFolder: (path: string) => ipcRenderer.invoke('shell:showItemInFolder', path),
   getBackendPort: () => ipcRenderer.invoke('backend:port'),
   getBackendStatus: () => ipcRenderer.invoke('backend:status'),

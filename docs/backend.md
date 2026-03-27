@@ -18,6 +18,7 @@ If you want the exact end-to-end pipeline from file selection to Plotly renderin
 | `app/main.py` | Creates the FastAPI app, configures CORS (allow-all for localhost use), mounts the router at `/api` |
 | `app/routes.py` | All REST endpoint handlers; instantiates `DataProvider` and `PsrcatDB` at module load |
 | `app/data_provider.py` | Abstract `DataProvider` base class + `MockProvider` + `PsrchiveProvider` |
+| `app/processing.py` | Session manager, recipe normalization, preview materialization, and CLI orchestration for `paz` / `pam` / `pat` / `pac` |
 | `app/psrcat.py` | Parses `backend/data/psrcat_tar/psrcat.db` and exposes query methods |
 | `../src/main/backend.ts` | Electron-side runtime selector and process/container manager |
 
@@ -45,6 +46,37 @@ try:
 except ImportError:
     return MockProvider()
 ```
+
+## ProcessingSessionManager
+
+Advanced PSRCHIVE workflows now run through `ProcessingSessionManager` in `app/processing.py`.
+
+Responsibilities:
+
+- detect runtime capabilities from the active provider and available CLIs
+- create session ids and temp directories
+- normalize the live processing recipe
+- materialize a preview archive copy when the recipe changes
+- export a processed archive copy
+- run `pat` for TOA extraction and build the residual preview payload
+
+### Session model
+
+- one active file in the renderer maps to one backend processing session
+- the source archive is copied into a temp directory
+- preview-affecting recipe changes are applied to that temp copy
+- chart endpoints then read from the current preview path
+
+### Recipe orchestration
+
+The session materializer intentionally reuses PSRCHIVE tools instead of reimplementing archive transforms:
+
+- `paz` handles channel zapping
+- `pam` handles scrunching and phase rotation
+- `pac` handles calibration preview
+- `pat` handles TOA extraction
+
+This keeps preview behavior aligned with export behavior.
 
 ## PSRCAT parser (`psrcat.py`)
 
@@ -106,6 +138,30 @@ Docker mode mounts these host paths into the container unchanged so archive file
 - `/tmp`
 
 The container also mounts the repo `backend/` directory at `/workspace/backend` and lazily installs `fastapi`, `uvicorn`, and `numpy` if they are not already present in the image.
+
+## CLI orchestration details
+
+Session preview materialization currently follows this order:
+
+1. copy the source archive into the session temp directory
+2. apply `paz -m -z ...` when `recipe.zap.channels` is not empty
+3. apply `pam -m` for `tscrunch`, `fscrunch`, `bscrunch`, and `phase rotate`
+4. apply `pac` preview output when calibration is enabled
+5. expose the resulting temp archive through `/api/sessions/{id}/preview/*`
+
+Dedispersion is slightly different:
+
+- preview charts apply it during data extraction when `recipe.pam.dedisperse = true`
+- archive export additionally runs `pam -m -D` on the exported file so the saved copy matches the preview semantics
+
+TOA extraction uses:
+
+- `pat -A <algorithm> -s <template> -f <tempo2|parkes>`
+- `pat -R` for the shift/error row used to build the residual preview
+
+Calibration preview uses:
+
+- `pac -d`, `-p`, `-A`, `-s`, `-S`, and `-P` depending on the selected wizard inputs
 
 ## Installing psrchive
 

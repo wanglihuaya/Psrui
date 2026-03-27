@@ -14,11 +14,12 @@ State is managed with [Jotai](https://jotai.org/). Atoms are split into two file
 | Atom | Type | Description |
 |------|------|-------------|
 | `currentFileAtom` | `string \| null` | Absolute path of the currently active archive |
-| `metadataAtom` | `ArchiveMetadata \| null` | Metadata from `/api/archive` |
-| `profileDataAtom` | `ProfileData \| null` | Profile data from `/api/archive/profile` |
-| `waterfallDataAtom` | `WaterfallData \| null` | Waterfall data from `/api/archive/waterfall` |
-| `timePhaseDataAtom` | `TimePhaseData \| null` | Time-phase data from `/api/archive/time-phase` |
-| `bandpassDataAtom` | `BandpassData \| null` | Bandpass data from `/api/archive/bandpass` |
+| `currentSessionIdAtom` | `string \| null` | Active backend processing session id for the current archive |
+| `metadataAtom` | `ArchiveMetadata \| null` | Metadata from `/api/sessions/{id}/preview/metadata` |
+| `profileDataAtom` | `ProfileData \| null` | Profile data from `/api/sessions/{id}/preview/profile` |
+| `waterfallDataAtom` | `WaterfallData \| null` | Waterfall data from `/api/sessions/{id}/preview/waterfall` |
+| `timePhaseDataAtom` | `TimePhaseData \| null` | Time-phase data from `/api/sessions/{id}/preview/time-phase` |
+| `bandpassDataAtom` | `BandpassData \| null` | Bandpass data from `/api/sessions/{id}/preview/bandpass` |
 | `activeTabAtom` | `ViewTab` | Active main-panel tab: `'profile' \| 'waterfall' \| 'time-phase' \| 'bandpass'` |
 | `loadingAtom` | `boolean` | `true` while any archive endpoint is in flight |
 | `errorAtom` | `string \| null` | Last error message (cleared on new file load) |
@@ -31,6 +32,12 @@ State is managed with [Jotai](https://jotai.org/). Atoms are split into two file
 | `fileTreeLoadingAtom` | `boolean` | `true` while tree is being fetched |
 | `splitLayoutAtom` | `SplitLayout` | Main panel layout: `'single' \| 'horizontal' \| 'vertical' \| 'grid'` |
 | `splitSlotsAtom` | `SplitSlot[]` | Which chart each split pane shows; length 4; `SplitSlot = ViewTab` |
+| `processingCapabilitiesAtom` | `ProcessingCapabilities \| null` | Capability report from `/api/capabilities` used to enable/disable advanced tools |
+| `processingRecipeAtom` | `ProcessingRecipe` | Current live recipe for zap/pam/calibration/toa/output |
+| `processingHistoryAtom` | `ProcessingRecipe[]` | Undo history for preview-affecting recipe changes |
+| `processingRedoHistoryAtom` | `ProcessingRecipe[]` | Redo history for preview-affecting recipe changes |
+| `processingInspectorOpenAtom` | `boolean` | Whether the right-side Processing Inspector is visible |
+| `toaResultAtom` | `ToaResult \| null` | Latest `pat` result and aligned residual preview |
 
 ---
 
@@ -127,6 +134,10 @@ Default labels: `Observed`, `Calibrated`, `RFI Cleaned`, `Template`, `Processed`
 ### `fileLabelMapAtom` — key `psrchive-file-labels`
 
 Type: `Record<string, string[]>` — maps file path → array of applied label IDs.
+
+### `batchRecipesAtom` — key `psrchive-batch-recipes`
+
+Type: `BatchRecipe[]` — saved processing recipes scoped by workspace. Used by the Batch tab in `ProcessingInspector.tsx`.
 
 ---
 

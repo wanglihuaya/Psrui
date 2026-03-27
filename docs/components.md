@@ -136,6 +136,52 @@ In multi-pane layouts each pane has its own **SlotHeader** — click the pane ti
 - Absolute loading spinner overlay (`loadingAtom`)
 - Absolute error overlay (`errorAtom`)
 - Each pane renders a `ChartRenderer` with the assigned `ViewTab`
+- Top-right `Processing` button toggles the right-side `ProcessingInspector`
+- `WaterfallChart` now receives the shared processing recipe updater so zapping goes through the same session history as the inspector controls
+
+---
+
+## ProcessingInspector
+
+**File**: `ProcessingInspector.tsx`
+
+Right-side processing workspace for the session-based PSRCHIVE workflow.
+
+### Layout
+
+- Fixed-width sidebar attached to the chart area
+- Hidden until `processingInspectorOpenAtom = true`
+- Header includes close button and runtime summary
+- If advanced processing is unavailable, the panel stays open and renders capability notes from `/api/capabilities`
+
+### Tabs
+
+1. **Zap**
+   - Shows zapped channel count
+   - Lists `recipe.zap.channels`
+   - Supports clearing all zapped channels
+2. **Pam**
+   - Debounced controls for `dedisperse`, `tscrunch`, `fscrunch`, `bscrunch`, `phase rotate`
+3. **TOA**
+   - Template picker
+   - `pat` algorithm and output format selection
+   - Optional scrunch flags and text export path
+   - Renders parsed TOA rows and an observed/template/difference residual chart
+4. **Cal**
+   - Search path / `database.txt` / solution file inputs
+   - Model selector (`SingleAxis`, `Polar`, `Reception`)
+   - `pol-only` toggle
+   - Shows latest `pac` preview command/log
+5. **Batch**
+   - Output naming defaults
+   - Saved workspace-scoped recipe management
+   - Sequential batch runner
+
+### Shared behavior
+
+- Preview-affecting edits call the same recipe updater used by undo/redo.
+- `toa` and `output` config remain part of the live recipe so they can be saved into batch recipes.
+- Batch runs create temporary sessions per file, export processed archives, optionally export TOA text, then destroy each session.
 
 ---
 
@@ -238,7 +284,7 @@ All charts live in `components/charts/`.
 ### PlotlyWrapper
 
 **File**: `charts/PlotlyWrapper.tsx`  
-**Props**: `{ data: Plotly.Data[], layout?: Partial<Plotly.Layout>, config?: Partial<Plotly.Config> }`
+**Props**: `{ data: Plotly.Data[], layout?: Partial<Plotly.Layout>, config?: Partial<Plotly.Config>, onPlotlyClick?: ..., onPlotlySelected?: ... }`
 
 Manages a raw `plotly.js-dist-min` `<div>`, handling:
 - Mount: `Plotly.newPlot()` + `ResizeObserver` → `Plotly.Plots.resize()`
@@ -246,6 +292,8 @@ Manages a raw `plotly.js-dist-min` `<div>`, handling:
 - Unmount: `Plotly.purge()` + disconnect observer
 
 Merges a shared `DARK_LAYOUT` (transparent background, `#0f1420` plot area, monospace font, muted grid) with per-chart overrides.
+
+The wrapper now optionally forwards Plotly click/select events so chart components can drive non-destructive processing actions.
 
 ### ProfileChart
 
@@ -261,6 +309,13 @@ X-axis: `Phase (0–1)`, Y-axis: `Intensity (normalized)`.
 Heatmap of shape `[nchan][nbin]` — frequency channels (MHz) on Y, phase on X.  
 Colorscale driven by `settings.chartColorscale`.  
 Used to inspect dispersion and RFI.
+
+Additional v1 processing behavior:
+
+- enables Plotly box-select mode in the modebar
+- clicking a row toggles a single zapped channel
+- box-select adds a channel range to `recipe.zap.channels`
+- all zapping still flows through the same session recipe updater used by the Processing Inspector
 
 ### TimePhaseChart
 

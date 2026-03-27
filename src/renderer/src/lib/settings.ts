@@ -1,5 +1,6 @@
 import { atom } from 'jotai'
 import { atomWithStorage } from 'jotai/utils'
+import type { BatchRecipe } from '../../../shared/processing'
 
 export type Language = 'en' | 'zh'
 export type AppTheme = 'dark' | 'midnight' | 'nord' | 'light'
@@ -58,3 +59,4 @@ export const labelsAtom = atomWithStorage<FileLabel[]>('psrchive-labels', [
   { id: 'processed', name: 'Processed', color: '#5bcfef' },
 ])
 export const fileLabelMapAtom = atomWithStorage<Record<string, string[]>>('psrchive-file-labels', {})
+export const batchRecipesAtom = atomWithStorage<BatchRecipe[]>('psrchive-batch-recipes', [])

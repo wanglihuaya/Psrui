@@ -31,9 +31,17 @@ interface PlotlyWrapperProps {
   data: Plotly.Data[]
   layout?: Partial<Plotly.Layout>
   config?: Partial<Plotly.Config>
+  onPlotlyClick?: (event: Plotly.PlotMouseEvent) => void
+  onPlotlySelected?: (event: Plotly.PlotSelectionEvent) => void
 }
 
-export function PlotlyWrapper({ data, layout = {}, config }: PlotlyWrapperProps) {
+export function PlotlyWrapper({
+  data,
+  layout = {},
+  config,
+  onPlotlyClick,
+  onPlotlySelected
+}: PlotlyWrapperProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const plotRef = useRef<HTMLDivElement | null>(null)
 
@@ -70,6 +78,13 @@ export function PlotlyWrapper({ data, layout = {}, config }: PlotlyWrapperProps)
 
     Plotly.newPlot(plotDiv, data, mergedLayout as Plotly.Layout, mergedConfig as Plotly.Config)
 
+    if (onPlotlyClick) {
+      ;(plotDiv as any).on?.('plotly_click', onPlotlyClick)
+    }
+    if (onPlotlySelected) {
+      ;(plotDiv as any).on?.('plotly_selected', onPlotlySelected)
+    }
+
     const resizeObserver = new ResizeObserver(() => {
       Plotly.Plots.resize(plotDiv)
     })
@@ -83,7 +98,7 @@ export function PlotlyWrapper({ data, layout = {}, config }: PlotlyWrapperProps)
     }
     // only run on mount/unmount
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [onPlotlyClick, onPlotlySelected])
 
   // update data/layout when they change
   useEffect(() => {

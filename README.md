@@ -131,6 +131,7 @@ psrchive-ele/
 │   │   └── index.ts       # Context bridge (IPC → renderer)
 │   ├── shared/
 │   │   ├── commands.ts    # Shared command ids for menu / shortcuts / UI
+│   │   ├── processing.ts  # Shared processing/session/TOA/batch types
 │   │   └── update.ts      # Shared updater state types
 │   └── renderer/src/
 │       ├── App.tsx         # Root: data loading, shared command handlers
@@ -138,6 +139,7 @@ psrchive-ele/
 │       │   ├── TitleBar.tsx       # Icon command menu + updater status
 │       │   ├── Sidebar.tsx
 │       │   ├── MainPanel.tsx
+│       │   ├── ProcessingInspector.tsx # Session-based PSRCHIVE workflow UI
 │       │   ├── StatusBar.tsx
 │       │   ├── SettingsPanel.tsx  # Categorized settings center
 │       │   ├── HelpPanel.tsx
@@ -159,11 +161,14 @@ psrchive-ele/
 │   │   ├── main.py          # FastAPI app
 │   │   ├── routes.py        # REST endpoints
 │   │   ├── data_provider.py # Mock / real psrchive data
+│   │   ├── processing.py    # Session materialization + paz/pam/pat/pac orchestration
 │   │   └── psrcat.py        # PSRCAT database parser
 │   └── requirements.txt
 ├── docs/                    # Developer documentation
 │   ├── architecture.md      # System overview & communication flows
 │   ├── api.md               # Backend REST API reference
+│   ├── processing-guide.md  # End-user session processing workflow guide
+│   ├── psrchive-features.md # Implemented vs planned PSRCHIVE capability matrix
 │   ├── components.md        # React component reference
 │   ├── state.md             # Jotai atom reference
 │   ├── shortcuts.md         # Keyboard shortcuts
@@ -179,12 +184,20 @@ psrchive-ele/
 | Method | Path                      | Description                      |
 |--------|---------------------------|----------------------------------|
 | GET    | `/api/health`             | Backend status + provider name   |
+| GET    | `/api/capabilities`       | Runtime/provider/CLI processing capabilities |
 | GET    | `/api/files?dir=`         | List archive files in directory  |
 | GET    | `/api/archive?path=`      | Archive metadata                 |
 | GET    | `/api/archive/profile`    | Pulse profile (Stokes I/Q/U/V)   |
 | GET    | `/api/archive/waterfall`  | Frequency × Phase heatmap        |
 | GET    | `/api/archive/time-phase` | Time × Phase heatmap             |
 | GET    | `/api/archive/bandpass`   | Mean intensity per channel       |
+| POST   | `/api/sessions`           | Create a non-destructive processing session |
+| PATCH  | `/api/sessions/{id}/recipe` | Update the active processing recipe |
+| GET    | `/api/sessions/{id}/preview/*` | Session preview metadata + charts |
+| POST   | `/api/sessions/{id}/export` | Export a processed archive copy |
+| POST   | `/api/sessions/{id}/toa`  | Run `pat` and return TOA + residual preview |
+| POST   | `/api/sessions/{id}/calibration/preview` | Inspect the active `pac` preview command/log |
+| DELETE | `/api/sessions/{id}`      | Destroy a processing session |
 | GET    | `/api/psrcat/pulsars`     | All PSRCAT pulsars               |
 | GET    | `/api/psrcat/pulsar/{n}`  | Single pulsar by name            |
 | GET    | `/api/psrcat/stats`       | PSRCAT summary statistics        |
@@ -218,12 +231,38 @@ git clone git://git.code.sf.net/p/psrchive/code psrchive
 cd psrchive && ./bootstrap && ./configure && make && make install
 ```
 
+## PSRCHIVE Processing Workflow
+
+The app now ships a session-based processing workflow:
+
+- opening an archive creates a non-destructive backend processing session
+- the right-side `Processing` inspector drives `paz`, `pam`, `pat`, and `pac`
+- chart previews always come from `/api/sessions/{id}/preview/*`
+- `Save Archive` exports a new processed copy instead of mutating the source file
+
+Implemented in v1:
+
+- interactive channel zapping from the waterfall
+- live `pam` controls for `dedisperse`, `tscrunch`, `fscrunch`, `bscrunch`, and `phase rotate`
+- `pat` TOA extraction with an observed/template/difference residual preview
+- calibration preview from an existing search path / `database.txt` / solution file
+- local workspace-scoped batch recipe save/load/run support
+
+Current limitations:
+
+- zapping is channel-only for now
+- TOA uses `pat` and visual residuals, not full `tempo2` timing residuals yet
+- calibration does not build new databases from raw calibrator observations
+- batch processing is sequential foreground orchestration, not a background job queue
+
 ## Developer Docs
 
 | Document | Description |
 |----------|-------------|
 | [docs/architecture.md](docs/architecture.md) | System overview, data flow, state management |
 | [docs/api.md](docs/api.md) | Full REST API reference with request/response schemas |
+| [docs/processing-guide.md](docs/processing-guide.md) | How to use the Processing Inspector, export flow, TOA, calibration, and batch recipes |
+| [docs/psrchive-features.md](docs/psrchive-features.md) | Implemented vs planned PSRCHIVE capabilities and runtime requirements |
 | [docs/data-flow.md](docs/data-flow.md) | Local vs Docker runtime, archive-to-chart pipeline, and exact `psrchive` call path |
 | [docs/components.md](docs/components.md) | React component props, behavior, and sub-components |
 | [docs/state.md](docs/state.md) | All Jotai atoms — types, defaults, persistence |
@@ -242,11 +281,15 @@ cd psrchive && ./bootstrap && ./configure && make && make install
 - [x] Multi-window support
 - [x] Shared command menu across title bar, shortcuts, and macOS menu bar
 - [x] Categorized settings center with updater and backend controls
-- [ ] Interactive RFI zapping (click/box-select on waterfall)
-- [ ] TOA extraction with visual residuals
-- [ ] Polarization calibration wizard
-- [ ] Real-time parameter adjustment (sliders for pam operations)
-- [ ] Batch processing pipeline configuration
+- [x] Interactive RFI zapping (channel click / box-select on waterfall, v1)
+- [x] TOA extraction with visual residuals (v1 `pat` workflow)
+- [x] Polarization calibration wizard (v1 existing database / solution inputs)
+- [x] Real-time parameter adjustment (v1 `pam` controls)
+- [x] Batch processing pipeline configuration (v1 saved recipes + sequential execution)
+- [ ] Full `tempo2` timing residual workflow
+- [ ] Automatic / subint / phase-bin RFI tooling
+- [ ] Calibration database builder from raw calibrator observations
+- [ ] Background batch queue with retry/history
 
 ## References
 

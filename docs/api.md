@@ -21,6 +21,34 @@ Check backend liveness and active data provider.
 
 `provider` is `"psrchive"` when real bindings are available, otherwise `"mock"`.
 
+### `GET /api/capabilities`
+
+Return runtime-level processing capability metadata for the Processing Inspector.
+
+**Response**
+```json
+{
+  "runtime": "docker",
+  "provider": "psrchive",
+  "cli": {
+    "paz": true,
+    "pam": true,
+    "pat": true,
+    "pac": true,
+    "tempo2": true
+  },
+  "features": {
+    "sessions": true,
+    "zapping": true,
+    "pam": true,
+    "toa": true,
+    "calibration": true,
+    "batch": true
+  },
+  "messages": []
+}
+```
+
 ---
 
 ## Files
@@ -208,6 +236,192 @@ Mean intensity per frequency channel (bandpass shape).
   "intensities": [0.98, 1.02, ...]
 }
 ```
+
+---
+
+## Processing sessions
+
+The renderer now uses session-scoped preview endpoints for advanced PSRCHIVE workflows. Sessions are non-destructive and materialize temporary preview archives under a backend-managed temp directory.
+
+### `POST /api/sessions`
+
+Create a processing session from an archive path.
+
+**Request**
+```json
+{ "path": "/Users/me/data/J0437-4715.ar" }
+```
+
+**Response**
+```json
+{
+  "id": "f38c4f7fb57b4f95b54f7d5dbcb6d7f9",
+  "path": "/Users/me/data/J0437-4715.ar",
+  "previewPath": null,
+  "recipe": {
+    "zap": { "channels": [] },
+    "pam": {
+      "dedisperse": true,
+      "tscrunchFactor": 1,
+      "fscrunchFactor": 1,
+      "bscrunchFactor": 1,
+      "phaseRotateTurns": 0
+    },
+    "calibration": {
+      "enabled": false,
+      "searchPath": null,
+      "databasePath": null,
+      "solutionPath": null,
+      "model": "SingleAxis",
+      "polOnly": false
+    },
+    "toa": null,
+    "output": {
+      "archiveExtension": "processed",
+      "exportToa": false,
+      "toaFormat": "tempo2",
+      "outputDirectory": null
+    }
+  }
+}
+```
+
+### `PATCH /api/sessions/{session_id}/recipe`
+
+Replace the active processing recipe for a session.
+
+**Request**
+```json
+{
+  "recipe": {
+    "zap": { "channels": [12, 13, 14] },
+    "pam": {
+      "dedisperse": true,
+      "tscrunchFactor": 4,
+      "fscrunchFactor": 2,
+      "bscrunchFactor": 1,
+      "phaseRotateTurns": 0.0
+    }
+  }
+}
+```
+
+**Response**: same shape as `POST /api/sessions`.
+
+### `GET /api/sessions/{session_id}/preview/metadata`
+
+Return `ArchiveMetadata` for the session's current preview archive.
+
+### `GET /api/sessions/{session_id}/preview/profile`
+
+Return `ProfileData` for the session preview.
+
+Query params:
+
+| Param | Required | Description |
+|-------|----------|-------------|
+| `subint` | no | Sub-integration index |
+| `chan` | no | Channel index |
+
+### `GET /api/sessions/{session_id}/preview/waterfall`
+
+Return `WaterfallData` for the session preview.
+
+Query params:
+
+| Param | Required | Description |
+|-------|----------|-------------|
+| `subint` | no | Sub-integration index |
+
+### `GET /api/sessions/{session_id}/preview/time-phase`
+
+Return `TimePhaseData` for the session preview.
+
+Query params:
+
+| Param | Required | Description |
+|-------|----------|-------------|
+| `chan` | no | Channel index |
+
+### `GET /api/sessions/{session_id}/preview/bandpass`
+
+Return `BandpassData` for the session preview.
+
+### `POST /api/sessions/{session_id}/export`
+
+Export the current preview recipe to a new archive file.
+
+**Request**
+```json
+{ "outputPath": "/Users/me/data/J0437-4715.processed.ar" }
+```
+
+**Response**
+```json
+{ "outputPath": "/Users/me/data/J0437-4715.processed.ar" }
+```
+
+### `POST /api/sessions/{session_id}/toa`
+
+Run `pat` against the session preview.
+
+**Request**
+```json
+{
+  "templatePath": "/Users/me/templates/J0437-4715.std.ar",
+  "algorithm": "PGS",
+  "format": "tempo2",
+  "timeScrunch": false,
+  "frequencyScrunch": false,
+  "outputPath": "/Users/me/data/J0437-4715.tim"
+}
+```
+
+**Response**
+```json
+{
+  "format": "tempo2",
+  "rawOutput": "FORMAT 1\n...",
+  "rows": [
+    {
+      "line": "/Users/me/data/J0437-4715.ar ...",
+      "shiftTurns": -3.2e-9,
+      "errorTurns": 1.8e-10,
+      "frequencyMHz": 1369.0,
+      "subint": 0,
+      "chan": 0
+    }
+  ],
+  "residual": {
+    "phase": [0.0, 0.002, "..."],
+    "observed": [0.1, 0.11, "..."],
+    "template": [0.09, 0.1, "..."],
+    "difference": [0.01, 0.01, "..."]
+  },
+  "command": ["pat", "-A", "PGS", "..."],
+  "outputPath": "/Users/me/data/J0437-4715.tim"
+}
+```
+
+This is a v1 `pat` workflow with a visual residual preview, not a full `tempo2` timing residual pipeline yet.
+
+### `POST /api/sessions/{session_id}/calibration/preview`
+
+Return the last materialized calibration command/log for the current session preview.
+
+**Response**
+```json
+{
+  "command": ["pac", "-e", "previewcal", "..."],
+  "commands": [["paz", "..."], ["pac", "..."]],
+  "log": "pac output...",
+  "previewPath": "/tmp/psrchive-viewer-session-.../source.previewcal"
+}
+```
+
+### `DELETE /api/sessions/{session_id}`
+
+Destroy the processing session and delete all temporary preview files.
 
 ---
 

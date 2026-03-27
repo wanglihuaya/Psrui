@@ -6,7 +6,7 @@ This document explains the current end-to-end logic of the app:
 
 1. how the backend starts without Docker
 2. how the backend starts with Docker / OrbStack
-3. how an archive file flows from the file picker to the rendered charts
+3. how an archive file flows into a session-based preview pipeline
 4. how `psrchive` is actually called
 
 ---
@@ -158,42 +158,44 @@ Relevant files:
 - [src/main/index.ts](/Users/lihua/Documents/code/test/Psrui/src/main/index.ts)
 - [src/renderer/src/components/Sidebar.tsx](/Users/lihua/Documents/code/test/Psrui/src/renderer/src/components/Sidebar.tsx)
 
-### Step B: renderer sets the active file
+### Step B: renderer sets the active file and creates a processing session
 
 When a file is selected:
 
 - `currentFileAtom` is updated
 - `openFilesAtom` is updated
+- `App.tsx` creates a backend processing session with `POST /api/sessions`
+- the returned `session.id` is stored in `currentSessionIdAtom`
 
-That triggers the archive-loading effect in:
+That triggers the session-initialization effect in:
 
 - [src/renderer/src/App.tsx](/Users/lihua/Documents/code/test/Psrui/src/renderer/src/App.tsx)
 
-### Step C: renderer fires five backend requests in parallel
+### Step C: renderer fires five session preview requests in parallel
 
 The app uses `Promise.allSettled()` to request:
 
-1. `/api/archive`
-2. `/api/archive/profile`
-3. `/api/archive/waterfall`
-4. `/api/archive/time-phase`
-5. `/api/archive/bandpass`
+1. `/api/sessions/{id}/preview/metadata`
+2. `/api/sessions/{id}/preview/profile`
+3. `/api/sessions/{id}/preview/waterfall`
+4. `/api/sessions/{id}/preview/time-phase`
+5. `/api/sessions/{id}/preview/bandpass`
 
 API client:
 
 - [src/renderer/src/lib/api.ts](/Users/lihua/Documents/code/test/Psrui/src/renderer/src/lib/api.ts)
 
-This means metadata and chart arrays are fetched together, not serially.
+This means metadata and chart arrays are fetched together from the active session preview, not serially.
 
 ### Step D: renderer stores each response into Jotai atoms
 
 Response to atom mapping:
 
-- `/api/archive` → `metadataAtom`
-- `/api/archive/profile` → `profileDataAtom`
-- `/api/archive/waterfall` → `waterfallDataAtom`
-- `/api/archive/time-phase` → `timePhaseDataAtom`
-- `/api/archive/bandpass` → `bandpassDataAtom`
+- `/api/sessions/{id}/preview/metadata` → `metadataAtom`
+- `/api/sessions/{id}/preview/profile` → `profileDataAtom`
+- `/api/sessions/{id}/preview/waterfall` → `waterfallDataAtom`
+- `/api/sessions/{id}/preview/time-phase` → `timePhaseDataAtom`
+- `/api/sessions/{id}/preview/bandpass` → `bandpassDataAtom`
 
 Atoms live in:
 
@@ -201,11 +203,22 @@ Atoms live in:
 
 Important behavior:
 
-- if metadata fails, `App.tsx` throws `meta.reason`
-- so metadata is effectively the gating request for a “clean” archive load
+- if preview metadata fails, `App.tsx` treats the session load as failed
+- so preview metadata is effectively the gating request for a “clean” archive load
 - even though some chart requests may already have succeeded
 
-### Step E: MainPanel renders the selected chart layout
+### Step E: processing edits update the session recipe
+
+The new Processing Inspector does not edit charts directly. Instead:
+
+1. UI controls update the in-memory `processingRecipeAtom`
+2. preview-affecting edits call `PATCH /api/sessions/{id}/recipe`
+3. the backend materializes a new temporary preview archive
+4. the renderer re-requests the five preview endpoints above
+
+This is how waterfall zapping, live pam controls, and calibration preview all stay non-destructive while still updating charts immediately.
+
+### Step F: MainPanel renders the selected chart layout
 
 Layout controller:
 
@@ -236,6 +249,10 @@ The backend does **not** generate PNG image files for the charts.
 
 What the backend returns is JSON arrays.
 The renderer then turns those arrays into interactive Plotly charts.
+
+### Legacy compatibility
+
+The original `/api/archive*` endpoints still exist for compatibility and lower-level debugging, but the renderer's main archive workflow now uses session preview endpoints by default.
 
 ### Profile
 

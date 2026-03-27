@@ -6,7 +6,7 @@ English version: [data-flow.md](data-flow.md)
 
 1. 不使用 Docker 时，backend 是怎么启动的
 2. 使用 Docker / OrbStack 时，backend 是怎么启动的
-3. 一个 archive 文件从文件选择器走到最终图表渲染的路径
+3. 一个 archive 文件如何流入基于 session 的 preview 管线
 4. `psrchive` 在代码里到底是怎么被调用的
 
 ---
@@ -158,40 +158,42 @@ workspace 选择路径：
 - `src/main/index.ts`
 - `src/renderer/src/components/Sidebar.tsx`
 
-### Step B：renderer 设置当前激活文件
+### Step B：renderer 设置当前激活文件，并创建 processing session
 
 文件被选中后：
 
 - `currentFileAtom` 更新
 - `openFilesAtom` 更新
+- `App.tsx` 会通过 `POST /api/sessions` 创建一个 backend processing session
+- 返回的 `session.id` 会存进 `currentSessionIdAtom`
 
-随后会触发 `App.tsx` 中负责加载归档的 effect。
+随后会触发 `App.tsx` 中负责初始化 session 的 effect。
 
-### Step C：renderer 并行发起 5 个 backend 请求
+### Step C：renderer 并行发起 5 个 session preview 请求
 
 应用通过 `Promise.allSettled()` 一次性请求：
 
-1. `/api/archive`
-2. `/api/archive/profile`
-3. `/api/archive/waterfall`
-4. `/api/archive/time-phase`
-5. `/api/archive/bandpass`
+1. `/api/sessions/{id}/preview/metadata`
+2. `/api/sessions/{id}/preview/profile`
+3. `/api/sessions/{id}/preview/waterfall`
+4. `/api/sessions/{id}/preview/time-phase`
+5. `/api/sessions/{id}/preview/bandpass`
 
 API client 位于：
 
 - `src/renderer/src/lib/api.ts`
 
-这意味着元数据与各类图表数组是并行获取的，而不是串行等待。
+这意味着元数据与各类图表数组会一起从当前 session preview 获取，而不是串行等待。
 
 ### Step D：renderer 将响应写入 Jotai atoms
 
 接口与 atom 的映射关系：
 
-- `/api/archive` → `metadataAtom`
-- `/api/archive/profile` → `profileDataAtom`
-- `/api/archive/waterfall` → `waterfallDataAtom`
-- `/api/archive/time-phase` → `timePhaseDataAtom`
-- `/api/archive/bandpass` → `bandpassDataAtom`
+- `/api/sessions/{id}/preview/metadata` → `metadataAtom`
+- `/api/sessions/{id}/preview/profile` → `profileDataAtom`
+- `/api/sessions/{id}/preview/waterfall` → `waterfallDataAtom`
+- `/api/sessions/{id}/preview/time-phase` → `timePhaseDataAtom`
+- `/api/sessions/{id}/preview/bandpass` → `bandpassDataAtom`
 
 这些 atom 定义在：
 
@@ -199,11 +201,22 @@ API client 位于：
 
 一个关键行为：
 
-- 如果 metadata 请求失败，`App.tsx` 会抛出 `meta.reason`
-- 所以 metadata 实际上是“这次文件加载是否算成功”的门槛
+- 如果 preview metadata 请求失败，`App.tsx` 会把这次 session 加载视为失败
+- 所以 preview metadata 仍然是“这次文件加载是否算成功”的门槛
 - 即便其他几个图表请求已经成功返回，也会被整体视为一次失败加载
 
-### Step E：MainPanel 渲染当前选中的图表布局
+### Step E：processing 编辑会更新 session recipe
+
+新的 Processing Inspector 并不会直接改图，而是按下面这条线工作：
+
+1. UI 控件先更新内存里的 `processingRecipeAtom`
+2. 会影响 preview 的编辑再调用 `PATCH /api/sessions/{id}/recipe`
+3. backend materialize 一份新的临时 preview archive
+4. renderer 再重新请求上面那五个 preview 接口
+
+所以 waterfall zapping、实时 pam 控件、calibration preview 都可以做到非破坏预览。
+
+### Step F：MainPanel 渲染当前选中的图表布局
 
 布局控制器：
 
@@ -233,6 +246,10 @@ MainPanel 可以在四种视图之间切换：
 backend **不会** 直接生成 PNG 图像文件。
 
 backend 返回的是 JSON 数组；真正把这些数组变成图像的是 renderer 里的 Plotly 组件。
+
+### Legacy 兼容说明
+
+原来的 `/api/archive*` 接口仍然保留，用于兼容和底层调试；但 renderer 当前默认的主加载链路已经切到 session preview 接口。
 
 ### Profile
 

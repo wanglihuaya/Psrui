@@ -131,6 +131,7 @@ psrchive-ele/
 │   │   └── index.ts       # Context bridge（IPC → renderer）
 │   ├── shared/
 │   │   ├── commands.ts    # 菜单 / 快捷键 / UI 共享 command id
+│   │   ├── processing.ts  # processing/session/TOA/batch 共享类型
 │   │   └── update.ts      # 共享 updater 状态类型
 │   └── renderer/src/
 │       ├── App.tsx         # 根组件：数据加载与 command handlers
@@ -138,6 +139,7 @@ psrchive-ele/
 │       │   ├── TitleBar.tsx       # 图标命令菜单 + 更新状态
 │       │   ├── Sidebar.tsx
 │       │   ├── MainPanel.tsx
+│       │   ├── ProcessingInspector.tsx # 基于 session 的 PSRCHIVE 处理工作流 UI
 │       │   ├── StatusBar.tsx
 │       │   ├── SettingsPanel.tsx  # 分类设置中心
 │       │   ├── HelpPanel.tsx
@@ -159,6 +161,7 @@ psrchive-ele/
 │   │   ├── main.py          # FastAPI app
 │   │   ├── routes.py        # REST endpoints
 │   │   ├── data_provider.py # Mock / 真正的 psrchive 数据提供者
+│   │   ├── processing.py    # session materialization + paz/pam/pat/pac 编排
 │   │   └── psrcat.py        # PSRCAT 数据库解析器
 │   └── requirements.txt
 ├── docs/                    # 开发者文档
@@ -166,6 +169,10 @@ psrchive-ele/
 │   ├── architecture.zh.md
 │   ├── api.md
 │   ├── api.zh.md
+│   ├── processing-guide.md
+│   ├── processing-guide.zh.md
+│   ├── psrchive-features.md
+│   ├── psrchive-features.zh.md
 │   ├── components.md
 │   ├── components.zh.md
 │   ├── data-flow.md
@@ -190,12 +197,20 @@ psrchive-ele/
 | Method | Path | 说明 |
 |--------|------|------|
 | GET | `/api/health` | 后端状态 + provider 名称 |
+| GET | `/api/capabilities` | runtime/provider/CLI processing 能力探测 |
 | GET | `/api/files?dir=` | 列出目录中的归档文件 |
 | GET | `/api/archive?path=` | 归档元数据 |
 | GET | `/api/archive/profile` | 脉冲轮廓（Stokes I/Q/U/V） |
 | GET | `/api/archive/waterfall` | Frequency × Phase 热力图 |
 | GET | `/api/archive/time-phase` | Time × Phase 热力图 |
 | GET | `/api/archive/bandpass` | 每个频率通道的平均强度 |
+| POST | `/api/sessions` | 创建非破坏 processing session |
+| PATCH | `/api/sessions/{id}/recipe` | 更新当前 processing recipe |
+| GET | `/api/sessions/{id}/preview/*` | 读取 session preview 元数据与图表 |
+| POST | `/api/sessions/{id}/export` | 导出处理后的 archive 副本 |
+| POST | `/api/sessions/{id}/toa` | 运行 `pat`，返回 TOA 和 residual preview |
+| POST | `/api/sessions/{id}/calibration/preview` | 查看当前 `pac` preview 的命令与日志 |
+| DELETE | `/api/sessions/{id}` | 销毁 processing session |
 | GET | `/api/psrcat/pulsars` | 全部 PSRCAT pulsars |
 | GET | `/api/psrcat/pulsar/{n}` | 按名称查询单个 pulsar |
 | GET | `/api/psrcat/stats` | PSRCAT 汇总统计 |
@@ -232,12 +247,38 @@ git clone git://git.code.sf.net/p/psrchive/code psrchive
 cd psrchive && ./bootstrap && ./configure && make && make install
 ```
 
+## PSRCHIVE Processing 工作流
+
+应用现在已经内置基于 session 的 processing workflow：
+
+- 打开 archive 时会创建一个非破坏 backend processing session
+- 右侧 `Processing` inspector 统一驱动 `paz`、`pam`、`pat`、`pac`
+- 图表预览统一来自 `/api/sessions/{id}/preview/*`
+- `Save Archive` 永远导出新文件，不会修改原始 archive
+
+当前 v1 已实现：
+
+- 在 waterfall 上做频道级点击 / 框选 zapping
+- `dedisperse`、`tscrunch`、`fscrunch`、`bscrunch`、`phase rotate` 的实时 `pam` 控件
+- 带 observed/template/difference residual preview 的 `pat` TOA 提取
+- 基于已有 search path / `database.txt` / solution file 的 calibration preview
+- 按 workspace 保存、加载、执行 batch recipe
+
+当前已知限制：
+
+- zapping 目前只做到频道级
+- TOA 目前是 `pat` + visual residual，还不是完整 `tempo2` timing residual
+- calibration 还不支持从原始 calibrator observation 建数据库
+- batch 目前是前台顺序执行，不是后台任务队列
+
 ## 开发文档
 
 | 文档 | 说明 |
 |------|------|
 | [docs/architecture.zh.md](docs/architecture.zh.md) | 系统总览、通信流、状态管理入口 |
 | [docs/api.zh.md](docs/api.zh.md) | 完整 REST API 参考与请求 / 响应结构 |
+| [docs/processing-guide.zh.md](docs/processing-guide.zh.md) | Processing Inspector、导出、TOA、calibration、batch recipe 的使用手册 |
+| [docs/psrchive-features.zh.md](docs/psrchive-features.zh.md) | 已实现 / 未实现 PSRCHIVE 能力矩阵与 runtime 前提 |
 | [docs/data-flow.zh.md](docs/data-flow.zh.md) | local / Docker runtime 对比、文件到图表的数据链路、`psrchive` 实际调用路径 |
 | [docs/components.zh.md](docs/components.zh.md) | React 组件职责、props、行为与子结构 |
 | [docs/state.zh.md](docs/state.zh.md) | 所有 Jotai atoms、类型、默认值与持久化规则 |
@@ -256,11 +297,15 @@ cd psrchive && ./bootstrap && ./configure && make && make install
 - [x] 多窗口支持
 - [x] 标题栏、自定义菜单、快捷键、macOS 顶部菜单的统一 command system
 - [x] 带 updater 与 backend 控件的分类设置中心
-- [ ] 交互式 RFI zapping（在 waterfall 上点击 / 框选）
-- [ ] 带可视化 residuals 的 TOA 提取
-- [ ] 偏振标定向导
-- [ ] 实时参数调节（pam 操作滑杆）
-- [ ] 批处理流水线配置
+- [x] 交互式 RFI zapping（waterfall 上的频道点击 / 框选，v1）
+- [x] 带可视化 residuals 的 TOA 提取（v1 `pat` 工作流）
+- [x] 偏振标定向导（v1，仅已有 database / solution 输入）
+- [x] 实时参数调节（v1 `pam` 控件）
+- [x] 批处理流水线配置（v1，recipe 保存 + 顺序执行）
+- [ ] 完整 `tempo2` timing residual 工作流
+- [ ] 自动 / subint / phase-bin RFI 工具
+- [ ] 从原始 calibrator observation 构建 calibration database
+- [ ] 带重试 / 历史的后台 batch queue
 
 ## 参考资料
 

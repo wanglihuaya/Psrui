@@ -146,6 +146,52 @@ Profile | Freq × Phase | Time × Phase | Bandpass
 - 绝对定位的 loading spinner overlay（`loadingAtom`）
 - 绝对定位的 error overlay（`errorAtom`）
 - 每个 pane 都通过 `ChartRenderer` 渲染对应 `ViewTab`
+- 右上角新增 `Processing` 按钮，用来切换右侧 `ProcessingInspector`
+- `WaterfallChart` 现在会接收共享的 processing recipe updater，因此 zapping 和 inspector 控件共用同一条 session history
+
+---
+
+## ProcessingInspector
+
+**文件**：`ProcessingInspector.tsx`
+
+右侧 processing 工作区，承载基于 session 的 PSRCHIVE 处理流程。
+
+### 布局
+
+- 固定宽度的右侧栏，挂在图表区域旁边
+- 只有当 `processingInspectorOpenAtom = true` 时才显示
+- Header 带关闭按钮和 runtime 摘要
+- 如果高级处理不可用，面板不会消失，而是显示 `/api/capabilities` 返回的 capability notes
+
+### 标签页
+
+1. **Zap**
+   - 显示已 zap channel 数量
+   - 列出 `recipe.zap.channels`
+   - 支持一键清空
+2. **Pam**
+   - 对 `dedisperse`、`tscrunch`、`fscrunch`、`bscrunch`、`phase rotate` 做 debounce 控制
+3. **TOA**
+   - Template 选择
+   - `pat` 算法与输出格式选择
+   - 可选 scrunch 开关与文本导出路径
+   - 展示解析后的 TOA 行和 observed/template/difference residual 图
+4. **Cal**
+   - Search path / `database.txt` / solution file 输入
+   - 模型选择（`SingleAxis`、`Polar`、`Reception`）
+   - `pol-only` 开关
+   - 显示最近一次 `pac` preview 的命令与日志
+5. **Batch**
+   - 输出命名默认值
+   - 按 workspace 保存的 recipe 管理
+   - 顺序 batch runner
+
+### 共享行为
+
+- 会影响 preview 的编辑都会走和 undo/redo 相同的 recipe updater。
+- `toa` 和 `output` 配置也属于 live recipe，因此可以直接保存进 batch recipes。
+- batch run 会为每个文件创建临时 session、导出处理后的 archive、按需导出 TOA 文本，然后销毁该 session。
 
 ---
 
@@ -248,7 +294,7 @@ Profile | Freq × Phase | Time × Phase | Bandpass
 ### PlotlyWrapper
 
 **文件**：`charts/PlotlyWrapper.tsx`  
-**Props**：`{ data: Plotly.Data[], layout?: Partial<Plotly.Layout>, config?: Partial<Plotly.Config> }`
+**Props**：`{ data: Plotly.Data[], layout?: Partial<Plotly.Layout>, config?: Partial<Plotly.Config>, onPlotlyClick?: ..., onPlotlySelected?: ... }`
 
 管理原生 `plotly.js-dist-min` `<div>`，负责：
 
@@ -257,6 +303,8 @@ Profile | Freq × Phase | Time × Phase | Bandpass
 - Unmount：`Plotly.purge()` + 断开 observer
 
 它会把共享的 `DARK_LAYOUT`（透明背景、`#0f1420` plot area、等宽字体、低饱和网格）与每个图表的局部覆盖项合并。
+
+现在它也可以把 Plotly 的 click/select 事件继续往上传递，供图表组件驱动非破坏处理动作。
 
 ### ProfileChart
 
@@ -272,6 +320,13 @@ X 轴：`Phase (0–1)`，Y 轴：`Intensity (normalized)`。
 形状为 `[nchan][nbin]` 的热力图，Y 轴是频率通道（MHz），X 轴是相位。  
 颜色表由 `settings.chartColorscale` 驱动。  
 常用于检查色散、RFI 等问题。
+
+新增的 v1 processing 行为：
+
+- 在 modebar 中启用了 Plotly box-select
+- 单击某一行会切换单个 zapped channel
+- 框选会把一段 channel range 加入 `recipe.zap.channels`
+- 所有 zapping 仍然统一走 `ProcessingInspector` 共用的 session recipe updater
 
 ### TimePhaseChart
 

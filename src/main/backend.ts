@@ -81,7 +81,11 @@ export class BackendProcess {
       ['-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', String(this.port)],
       {
         cwd: backendDir,
-        env: { ...process.env, PYTHONUNBUFFERED: '1' },
+        env: {
+          ...process.env,
+          PYTHONUNBUFFERED: '1',
+          PSRCHIVE_VIEWER_RUNTIME: 'local'
+        },
         stdio: ['ignore', 'pipe', 'pipe']
       }
     )
@@ -101,6 +105,8 @@ export class BackendProcess {
       'PYTHONUNBUFFERED=1',
       '--env',
       'PYTHONDONTWRITEBYTECODE=1',
+      '--env',
+      'PSRCHIVE_VIEWER_RUNTIME=docker',
       '--mount',
       `type=volume,source=psrchive-viewer-pip-cache,target=/root/.cache/pip`,
       '--volume',

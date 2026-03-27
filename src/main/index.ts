@@ -187,14 +187,28 @@ function createWindow(filePath?: string): void {
 }
 
 function registerIPC(): void {
-  ipcMain.handle('dialog:openFile', async () => {
+  ipcMain.handle('dialog:openFile', async (_, kind: 'archive' | 'calibration' | 'text' | 'any' = 'archive') => {
+    const filters = kind === 'archive'
+      ? [
+          { name: 'Pulsar Archives', extensions: ['ar', 'fits', 'sf', 'rf', 'cf', 'pfd'] },
+          { name: 'FITS Files', extensions: ['fits', 'fit'] },
+          { name: 'All Files', extensions: ['*'] }
+        ]
+      : kind === 'calibration'
+        ? [
+            { name: 'Calibration Files', extensions: ['cf', 'pcal', 'fcal', 'pfit', 'txt'] },
+            { name: 'All Files', extensions: ['*'] }
+          ]
+        : kind === 'text'
+          ? [
+              { name: 'Text Files', extensions: ['txt', 'tim', 'par', 'dat'] },
+              { name: 'All Files', extensions: ['*'] }
+            ]
+          : [{ name: 'All Files', extensions: ['*'] }]
+
     const result = await dialog.showOpenDialog({
       properties: ['openFile', 'multiSelections'],
-      filters: [
-        { name: 'Pulsar Archives', extensions: ['ar', 'fits', 'sf', 'rf', 'cf', 'pfd'] },
-        { name: 'FITS Files', extensions: ['fits', 'fit'] },
-        { name: 'All Files', extensions: ['*'] }
-      ]
+      filters
     })
     return result.canceled ? [] : result.filePaths
   })
@@ -256,14 +270,28 @@ function registerIPC(): void {
     return updater?.installUpdate() ?? null
   })
 
-  ipcMain.handle('dialog:saveFile', async (_, defaultName: string) => {
+  ipcMain.handle('dialog:saveFile', async (_, defaultName: string, kind: 'image' | 'archive' | 'text' | 'any' = 'image') => {
+    const filters = kind === 'image'
+      ? [
+          { name: 'PNG Image', extensions: ['png'] },
+          { name: 'SVG Image', extensions: ['svg'] },
+          { name: 'All Files', extensions: ['*'] }
+        ]
+      : kind === 'archive'
+        ? [
+            { name: 'Pulsar Archive', extensions: ['ar', 'fits', 'rf', 'cf', 'pfd', 'processed'] },
+            { name: 'All Files', extensions: ['*'] }
+          ]
+        : kind === 'text'
+          ? [
+              { name: 'Text Files', extensions: ['txt', 'tim', 'par', 'dat'] },
+              { name: 'All Files', extensions: ['*'] }
+            ]
+          : [{ name: 'All Files', extensions: ['*'] }]
+
     const result = await dialog.showSaveDialog({
       defaultPath: defaultName,
-      filters: [
-        { name: 'PNG Image', extensions: ['png'] },
-        { name: 'SVG Image', extensions: ['svg'] },
-        { name: 'All Files', extensions: ['*'] }
-      ]
+      filters
     })
     return result.canceled ? null : result.filePath
   })

@@ -14,11 +14,12 @@ English version: [state.md](state.md)
 | Atom | 类型 | 说明 |
 |------|------|------|
 | `currentFileAtom` | `string \| null` | 当前激活归档文件的绝对路径 |
-| `metadataAtom` | `ArchiveMetadata \| null` | 来自 `/api/archive` 的元数据 |
-| `profileDataAtom` | `ProfileData \| null` | 来自 `/api/archive/profile` 的数据 |
-| `waterfallDataAtom` | `WaterfallData \| null` | 来自 `/api/archive/waterfall` 的数据 |
-| `timePhaseDataAtom` | `TimePhaseData \| null` | 来自 `/api/archive/time-phase` 的数据 |
-| `bandpassDataAtom` | `BandpassData \| null` | 来自 `/api/archive/bandpass` 的数据 |
+| `currentSessionIdAtom` | `string \| null` | 当前 archive 对应的 backend processing session id |
+| `metadataAtom` | `ArchiveMetadata \| null` | 来自 `/api/sessions/{id}/preview/metadata` 的元数据 |
+| `profileDataAtom` | `ProfileData \| null` | 来自 `/api/sessions/{id}/preview/profile` 的数据 |
+| `waterfallDataAtom` | `WaterfallData \| null` | 来自 `/api/sessions/{id}/preview/waterfall` 的数据 |
+| `timePhaseDataAtom` | `TimePhaseData \| null` | 来自 `/api/sessions/{id}/preview/time-phase` 的数据 |
+| `bandpassDataAtom` | `BandpassData \| null` | 来自 `/api/sessions/{id}/preview/bandpass` 的数据 |
 | `activeTabAtom` | `ViewTab` | 当前主面板 tab：`'profile' \| 'waterfall' \| 'time-phase' \| 'bandpass'` |
 | `loadingAtom` | `boolean` | 只要有任意 archive 请求在进行中，就为 `true` |
 | `errorAtom` | `string \| null` | 最近一次错误信息（新文件加载时会清空） |
@@ -31,6 +32,12 @@ English version: [state.md](state.md)
 | `fileTreeLoadingAtom` | `boolean` | 文件树是否正在加载 |
 | `splitLayoutAtom` | `SplitLayout` | 主面板布局：`'single' \| 'horizontal' \| 'vertical' \| 'grid'` |
 | `splitSlotsAtom` | `SplitSlot[]` | 每个分屏显示哪张图；长度固定为 4；`SplitSlot = ViewTab` |
+| `processingCapabilitiesAtom` | `ProcessingCapabilities \| null` | `/api/capabilities` 返回的能力报告，用于启用/禁用高级工具 |
+| `processingRecipeAtom` | `ProcessingRecipe` | 当前 live recipe，包含 zap/pam/calibration/toa/output |
+| `processingHistoryAtom` | `ProcessingRecipe[]` | 影响 preview 的 recipe 变更撤销栈 |
+| `processingRedoHistoryAtom` | `ProcessingRecipe[]` | 影响 preview 的 recipe 变更重做栈 |
+| `processingInspectorOpenAtom` | `boolean` | 右侧 Processing Inspector 是否打开 |
+| `toaResultAtom` | `ToaResult \| null` | 最近一次 `pat` 结果和 aligned residual preview |
 
 ---
 
@@ -127,6 +134,10 @@ interface FileLabel {
 ### `fileLabelMapAtom` — key `psrchive-file-labels`
 
 类型：`Record<string, string[]>`，表示文件路径 → label id 数组的映射关系。
+
+### `batchRecipesAtom` — key `psrchive-batch-recipes`
+
+类型：`BatchRecipe[]`，按 workspace 保存 processing recipes，供 `ProcessingInspector.tsx` 的 Batch 标签页使用。
 
 ---
 

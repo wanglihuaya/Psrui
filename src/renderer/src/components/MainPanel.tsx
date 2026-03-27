@@ -4,12 +4,14 @@ import {
   currentFileAtom,
   loadingAtom,
   errorAtom,
+  processingInspectorOpenAtom,
   splitLayoutAtom,
   splitSlotsAtom,
   type ViewTab,
   type SplitLayout,
   type SplitSlot
 } from '@/lib/store'
+import type { ProcessingRecipe } from '../../../shared/processing'
 import { ProfileChart } from './charts/ProfileChart'
 import { WaterfallChart } from './charts/WaterfallChart'
 import { TimePhaseChart } from './charts/TimePhaseChart'
@@ -22,7 +24,8 @@ import {
   Rows2,
   LayoutGrid,
   Square,
-  ChevronDown
+  ChevronDown,
+  SlidersHorizontal
 } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 import { clsx } from 'clsx'
@@ -41,9 +44,23 @@ const LAYOUT_OPTIONS: { id: SplitLayout; icon: any; label: string }[] = [
   { id: 'grid', icon: LayoutGrid, label: '2×2 Grid' }
 ]
 
-function ChartRenderer({ tab }: { tab: ViewTab }) {
+type RecipeUpdate = ProcessingRecipe | ((prev: ProcessingRecipe) => ProcessingRecipe)
+
+function ChartRenderer({
+  tab,
+  onApplyProcessingRecipe
+}: {
+  tab: ViewTab
+  onApplyProcessingRecipe: (
+    update: RecipeUpdate,
+    options?: {
+      pushHistory?: boolean
+      resetToa?: boolean
+    }
+  ) => Promise<void>
+}) {
   if (tab === 'profile') return <ProfileChart />
-  if (tab === 'waterfall') return <WaterfallChart />
+  if (tab === 'waterfall') return <WaterfallChart onApplyProcessingRecipe={onApplyProcessingRecipe} />
   if (tab === 'time-phase') return <TimePhaseChart />
   if (tab === 'bandpass') return <BandpassChart />
   return null
@@ -134,8 +151,19 @@ function LayoutPicker() {
   )
 }
 
-export function MainPanel() {
+interface MainPanelProps {
+  onApplyProcessingRecipe: (
+    update: RecipeUpdate,
+    options?: {
+      pushHistory?: boolean
+      resetToa?: boolean
+    }
+  ) => Promise<void>
+}
+
+export function MainPanel({ onApplyProcessingRecipe }: MainPanelProps) {
   const [activeTab, setActiveTab] = useAtom(activeTabAtom)
+  const [processingInspectorOpen, setProcessingInspectorOpen] = useAtom(processingInspectorOpenAtom)
   const [layout] = useAtom(splitLayoutAtom)
   const [slots, setSlots] = useAtom(splitSlotsAtom)
   const currentFile = useAtomValue(currentFileAtom)
@@ -188,6 +216,20 @@ export function MainPanel() {
             </span>
           )}
         </div>
+        <button
+          type="button"
+          onClick={() => setProcessingInspectorOpen((prev) => !prev)}
+          title="Toggle processing inspector"
+          className={clsx(
+            'mr-2 flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors',
+            processingInspectorOpen
+              ? 'bg-accent/12 text-accent'
+              : 'text-text-muted hover:bg-surface-2 hover:text-text-primary'
+          )}
+        >
+          <SlidersHorizontal className="h-3.5 w-3.5" />
+          Processing
+        </button>
         <LayoutPicker />
       </div>
 
@@ -212,7 +254,7 @@ export function MainPanel() {
         {/* Single */}
         {layout === 'single' && (
           <div className="w-full h-full p-2">
-            <ChartRenderer tab={activeTab} />
+            <ChartRenderer tab={activeTab} onApplyProcessingRecipe={onApplyProcessingRecipe} />
           </div>
         )}
 
@@ -225,7 +267,7 @@ export function MainPanel() {
                   <SlotHeader slot={slots[i]} index={i} onChangeSlot={changeSlot} />
                 </div>
                 <div className="flex-1 p-2 overflow-hidden">
-                  <ChartRenderer tab={slots[i]} />
+                  <ChartRenderer tab={slots[i]} onApplyProcessingRecipe={onApplyProcessingRecipe} />
                 </div>
               </div>
             ))}
@@ -241,7 +283,7 @@ export function MainPanel() {
                   <SlotHeader slot={slots[i]} index={i} onChangeSlot={changeSlot} />
                 </div>
                 <div className="flex-1 p-2 overflow-hidden">
-                  <ChartRenderer tab={slots[i]} />
+                  <ChartRenderer tab={slots[i]} onApplyProcessingRecipe={onApplyProcessingRecipe} />
                 </div>
               </div>
             ))}
@@ -264,7 +306,7 @@ export function MainPanel() {
                   <SlotHeader slot={slots[i]} index={i} onChangeSlot={changeSlot} />
                 </div>
                 <div className="flex-1 p-1 overflow-hidden">
-                  <ChartRenderer tab={slots[i]} />
+                  <ChartRenderer tab={slots[i]} onApplyProcessingRecipe={onApplyProcessingRecipe} />
                 </div>
               </div>
             ))}

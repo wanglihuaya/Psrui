@@ -25,17 +25,30 @@ class DataProvider(ABC):
 
     @abstractmethod
     def get_profile(
-        self, path: str, *, subint: int | None = None, chan: int | None = None
+        self,
+        path: str,
+        *,
+        subint: int | None = None,
+        chan: int | None = None,
+        dedisperse: bool = True,
     ) -> dict[str, Any]: ...
 
     @abstractmethod
     def get_waterfall(
-        self, path: str, *, subint: int | None = None
+        self,
+        path: str,
+        *,
+        subint: int | None = None,
+        dedisperse: bool = True,
     ) -> dict[str, Any]: ...
 
     @abstractmethod
     def get_time_phase(
-        self, path: str, *, chan: int | None = None
+        self,
+        path: str,
+        *,
+        chan: int | None = None,
+        dedisperse: bool = True,
     ) -> dict[str, Any]: ...
 
     @abstractmethod
@@ -106,7 +119,12 @@ class MockProvider(DataProvider):
         }
 
     def get_profile(
-        self, path: str, *, subint: int | None = None, chan: int | None = None
+        self,
+        path: str,
+        *,
+        subint: int | None = None,
+        chan: int | None = None,
+        dedisperse: bool = True,
     ) -> dict[str, Any]:
         p = self._parse_params(path)
         rng = p["rng"]
@@ -132,7 +150,11 @@ class MockProvider(DataProvider):
         }
 
     def get_waterfall(
-        self, path: str, *, subint: int | None = None
+        self,
+        path: str,
+        *,
+        subint: int | None = None,
+        dedisperse: bool = True,
     ) -> dict[str, Any]:
         p = self._parse_params(path)
         rng = p["rng"]
@@ -167,7 +189,11 @@ class MockProvider(DataProvider):
         }
 
     def get_time_phase(
-        self, path: str, *, chan: int | None = None
+        self,
+        path: str,
+        *,
+        chan: int | None = None,
+        dedisperse: bool = True,
     ) -> dict[str, Any]:
         p = self._parse_params(path)
         rng = p["rng"]
@@ -250,11 +276,17 @@ class PsrchiveProvider(DataProvider):
         }
 
     def get_profile(
-        self, path: str, *, subint: int | None = None, chan: int | None = None
+        self,
+        path: str,
+        *,
+        subint: int | None = None,
+        chan: int | None = None,
+        dedisperse: bool = True,
     ) -> dict[str, Any]:
         ar = self._psrchive.Archive_load(path)
         ar.remove_baseline()
-        ar.dedisperse()
+        if dedisperse:
+            ar.dedisperse()
 
         if subint is None:
             ar.tscrunch()
@@ -279,11 +311,16 @@ class PsrchiveProvider(DataProvider):
         return result
 
     def get_waterfall(
-        self, path: str, *, subint: int | None = None
+        self,
+        path: str,
+        *,
+        subint: int | None = None,
+        dedisperse: bool = True,
     ) -> dict[str, Any]:
         ar = self._psrchive.Archive_load(path)
         ar.remove_baseline()
-        ar.dedisperse()
+        if dedisperse:
+            ar.dedisperse()
         if subint is None:
             ar.tscrunch()
 
@@ -302,11 +339,16 @@ class PsrchiveProvider(DataProvider):
         }
 
     def get_time_phase(
-        self, path: str, *, chan: int | None = None
+        self,
+        path: str,
+        *,
+        chan: int | None = None,
+        dedisperse: bool = True,
     ) -> dict[str, Any]:
         ar = self._psrchive.Archive_load(path)
         ar.remove_baseline()
-        ar.dedisperse()
+        if dedisperse:
+            ar.dedisperse()
         if chan is None:
             ar.fscrunch()
 
