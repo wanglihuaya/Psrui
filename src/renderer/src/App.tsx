@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useAtom, useSetAtom, useAtomValue } from 'jotai'
 import { api } from '@/lib/api'
 import {
@@ -25,6 +25,7 @@ import { PsrcatPanel } from '@/components/PsrcatPanel'
 import { settingsAtom, settingsOpenAtom, sidebarCollapsedAtom, workspacePathAtom } from '@/lib/settings'
 import { psrcatOpenAtom } from '@/lib/store'
 import { useShortcuts } from '@/lib/shortcuts'
+import type { UpdateState } from '../../shared/update'
 
 export default function App() {
   const [backendReady, setBackendReady] = useAtom(backendReadyAtom)
@@ -44,6 +45,7 @@ export default function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useAtom(sidebarCollapsedAtom)
   const setWorkspacePath = useSetAtom(workspacePathAtom)
   const setPsrcatOpen = useSetAtom(psrcatOpenAtom)
+  const [updateState, setUpdateState] = useState<UpdateState | null>(null)
 
   // apply theme
   useEffect(() => {
@@ -97,6 +99,30 @@ export default function App() {
       })
     }
   }, [setCurrentFile, setOpenFiles])
+
+  useEffect(() => {
+    let mounted = true
+    let cleanup = () => {}
+
+    const loadUpdateState = async () => {
+      const initialState = await window.electron.getUpdateState()
+      if (mounted) {
+        setUpdateState(initialState)
+      }
+      cleanup = window.electron.onUpdateState((nextState: UpdateState) => {
+        if (mounted) {
+          setUpdateState(nextState)
+        }
+      })
+    }
+
+    void loadUpdateState()
+
+    return () => {
+      mounted = false
+      cleanup()
+    }
+  }, [])
 
   // load archive data when current file changes
   useEffect(() => {
@@ -155,9 +181,38 @@ export default function App() {
     }
   }
 
+  const handleCheckForUpdates = async () => {
+    const nextState = await window.electron.checkForUpdates()
+    if (nextState) {
+      setUpdateState(nextState)
+    }
+  }
+
+  const handleUpdateAction = async () => {
+    if (!updateState) return
+
+    if (updateState.phase === 'downloaded') {
+      await window.electron.installUpdate()
+      return
+    }
+
+    if (updateState.phase === 'available') {
+      const nextState = await window.electron.downloadUpdate()
+      if (nextState) {
+        setUpdateState(nextState)
+      }
+    }
+  }
+
   return (
     <div className="flex flex-col h-screen w-screen transition-colors duration-300 bg-surface-0">
-      <TitleBar onOpenFile={handleOpenFile} onOpenFolder={handleOpenFolder} />
+      <TitleBar
+        onOpenFile={handleOpenFile}
+        onOpenFolder={handleOpenFolder}
+        onCheckForUpdates={handleCheckForUpdates}
+        updateState={updateState}
+        onUpdate={handleUpdateAction}
+      />
       <div className="flex flex-1 overflow-hidden relative">
         <Sidebar onOpenFile={handleOpenFile} onOpenFolder={handleOpenFolder} />
         <div className="relative flex-1 overflow-hidden flex flex-col">

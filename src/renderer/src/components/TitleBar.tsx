@@ -5,11 +5,13 @@ import { activeTabAtom, backendReadyAtom, currentFileAtom, helpOpenAtom } from '
 import { useAtomValue, useSetAtom } from 'jotai'
 import { ArrowDownCircle } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import type { UpdateState } from '../../../shared/update'
 
 interface TitleBarProps {
   onOpenFile: () => void
   onOpenFolder: () => void
-  hasUpdate?: boolean
+  onCheckForUpdates: () => void
+  updateState: UpdateState | null
   onUpdate?: () => void
 }
 
@@ -68,18 +70,43 @@ function Menu({ label, items, isOpen, onToggle }: MenuProps) {
   )
 }
 
-// Fourth traffic-light style button: circle at rest, expands to pill on hover
-function UpdateButton({ hasUpdate, onUpdate }: { hasUpdate: boolean; onUpdate?: () => void }) {
+function UpdateButton({ updateState, onUpdate }: { updateState: UpdateState | null; onUpdate?: () => void }) {
   const [hovered, setHovered] = useState(false)
 
-  if (!hasUpdate) {
-    // Idle dot — same visual weight as a traffic light
+  if (!updateState) {
+    return null
+  }
+
+  if (updateState.phase === 'checking') {
     return (
-      <div
-        className="size-[14px] rounded-full bg-success border border-border/60 shrink-0"
-        title="Up to date"
-      />
+      <div className="no-drag rounded-full border border-border px-2.5 py-0.5 text-[10px] font-semibold text-text-secondary">
+        Checking…
+      </div>
     )
+  }
+
+  if (updateState.phase === 'downloading') {
+    return (
+      <div className="no-drag rounded-full border border-success/50 bg-success/15 px-2.5 py-0.5 text-[10px] font-semibold text-success">
+        {`Downloading ${Math.round(updateState.progress ?? 0)}%`}
+      </div>
+    )
+  }
+
+  if (updateState.phase === 'downloaded') {
+    return (
+      <button
+        onClick={onUpdate}
+        className="no-drag rounded-full border border-success/50 bg-success/15 px-2.5 py-0.5 text-[10px] font-semibold text-success transition-colors hover:bg-success/20"
+        title="Restart and install update"
+      >
+        Restart to Update
+      </button>
+    )
+  }
+
+  if (updateState.phase !== 'available') {
+    return null
   }
 
   return (
@@ -92,7 +119,7 @@ function UpdateButton({ hasUpdate, onUpdate }: { hasUpdate: boolean; onUpdate?: 
           ? 'bg-success/20 border-success/50 px-2.5 py-0.5 text-success'
           : 'w-3 h-3 bg-success border-success/60 p-0'
       }`}
-      title="Update available"
+      title={updateState.availableVersion ? `Update ${updateState.availableVersion} available` : 'Update available'}
       style={{ minWidth: hovered ? 80 : 12, height: 12 }}
     >
       {hovered ? (
@@ -105,7 +132,7 @@ function UpdateButton({ hasUpdate, onUpdate }: { hasUpdate: boolean; onUpdate?: 
   )
 }
 
-export function TitleBar({ onOpenFile, onOpenFolder, hasUpdate = false, onUpdate }: TitleBarProps) {
+export function TitleBar({ onOpenFile, onOpenFolder, onCheckForUpdates, updateState, onUpdate }: TitleBarProps) {
   const t = useT()
   const backendReady = useAtomValue(backendReadyAtom)
   const currentFile = useAtomValue(currentFileAtom)
@@ -179,6 +206,8 @@ export function TitleBar({ onOpenFile, onOpenFolder, hasUpdate = false, onUpdate
       label: 'Help',
       items: [
         { label: 'Keyboard Shortcuts', shortcut: '⌘/', onClick: () => { setHelpOpen(true); setOpenMenu(null) } },
+        { label: 'Check for Updates', onClick: () => { onCheckForUpdates(); setOpenMenu(null) } },
+        { separator: true },
         { label: 'About', onClick: () => { setSettingsOpen(true); setOpenMenu(null) } },
       ],
     },
@@ -186,11 +215,8 @@ export function TitleBar({ onOpenFile, onOpenFolder, hasUpdate = false, onUpdate
 
   return (
     <div className="drag-region flex items-center h-[47px] bg-surface-1 border-b border-border shrink-0 select-none">
-      {/* macOS Traffic Lights zone — traffic lights sit at x=16,y=11 in main process */}
-      {/* pl-[87px] = 16px (x) + ~56px (3 buttons × 12px + 2 gaps × 11px) + 5px breathing room */}
-      <div className="flex items-center gap-2 pl-[87px] pr-3 shrink-0 no-drag">
-        <UpdateButton hasUpdate={hasUpdate} onUpdate={onUpdate} />
-      </div>
+      {/* Reserve the native macOS traffic-light area so menus start after system controls. */}
+      <div className="titlebar-traffic-space shrink-0" aria-hidden="true" />
 
       {/* Menus */}
       <div className="flex items-center gap-0.5 no-drag" ref={menuRef}>
@@ -214,6 +240,7 @@ export function TitleBar({ onOpenFile, onOpenFolder, hasUpdate = false, onUpdate
 
       {/* Right side: Backend Status */}
       <div className="flex items-center gap-3 px-4 no-drag shrink-0">
+        <UpdateButton updateState={updateState} onUpdate={onUpdate} />
         <div className="flex items-center gap-1.5">
           <div
             className={`w-1.5 h-1.5 rounded-full ${

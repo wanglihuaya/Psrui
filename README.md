@@ -76,6 +76,13 @@ npm run build:mac      # Package as macOS app
 - Push to `main`: GitHub Actions will build macOS, Linux, and Windows packages and publish a prerelease automatically.
 - Push a tag like `v0.0.2`: GitHub Actions will build the same artifacts and publish a stable GitHub Release.
 - Manual trigger: you can also run the `Release` workflow from the Actions tab with `workflow_dispatch`.
+- On `main`, the workflow rewrites the packaged app version to a semver prerelease like `0.0.1-nightly.153`, so nightly builds can detect newer nightly releases.
+- On tagged releases, the workflow rewrites the packaged app version to the tag version (for example `v0.0.2` → `0.0.2`) before packaging.
+- Stable release `desc` comes from the annotated tag message, so use `git tag -a v0.0.2 -m "..."` and write the release notes there.
+- In-app updates are handled by `electron-updater`: packaged builds auto-check on launch, Help menu can manually trigger checks, available updates download on demand, and downloaded updates install via restart.
+- Update channel split is strict: nightly installs receive GitHub prereleases only, stable installs receive stable releases only.
+
+Detailed release steps and a release note template live in [docs/release.md](docs/release.md).
 
 The workflow file lives at `.github/workflows/release.yml` and uses the repository `GITHUB_TOKEN`, so no extra publish token is required for standard GitHub Releases.
 
@@ -180,6 +187,7 @@ cd psrchive && ./bootstrap && ./configure && make && make install
 | [docs/shortcuts.md](docs/shortcuts.md) | Keyboard shortcuts and how to add new ones |
 | [docs/backend.md](docs/backend.md) | FastAPI internals, data providers, PSRCAT parser |
 | [docs/electron.md](docs/electron.md) | Electron main process, IPC channels, preload bridge |
+| [docs/release.md](docs/release.md) | Commit → tag → GitHub Release → in-app update workflow |
 
 ## Roadmap
 

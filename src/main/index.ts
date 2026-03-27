@@ -2,10 +2,21 @@ import { app, BrowserWindow, shell, ipcMain, dialog } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { BackendProcess } from './backend'
+import { UpdateManager } from './updater'
+import type { UpdateState } from '../shared/update'
 
 const BACKEND_PORT = 8787
 const windows = new Set<BrowserWindow>()
 let backend: BackendProcess | null = null
+let updater: UpdateManager | null = null
+
+function broadcastUpdateState(state: UpdateState): void {
+  for (const window of windows) {
+    if (!window.isDestroyed()) {
+      window.webContents.send('updates:state', state)
+    }
+  }
+}
 
 function createWindow(filePath?: string): void {
   const window = new BrowserWindow({
@@ -15,7 +26,7 @@ function createWindow(filePath?: string): void {
     minHeight: 640,
     show: false,
     titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 16, y: 7 },
+    trafficLightPosition: { x: 16, y: 16 },
     backgroundColor: '#0a0e17',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -29,6 +40,9 @@ function createWindow(filePath?: string): void {
 
   window.on('ready-to-show', () => {
     window.show()
+    if (updater) {
+      window.webContents.send('updates:state', updater.getState())
+    }
     if (filePath) {
       window.webContents.send('file:open', filePath)
     }
@@ -89,6 +103,22 @@ function registerIPC(): void {
     createWindow(filePath)
   })
 
+  ipcMain.handle('updates:getState', () => {
+    return updater?.getState() ?? null
+  })
+
+  ipcMain.handle('updates:check', async () => {
+    return updater ? await updater.checkForUpdates() : null
+  })
+
+  ipcMain.handle('updates:download', async () => {
+    return updater ? await updater.downloadUpdate() : null
+  })
+
+  ipcMain.handle('updates:install', () => {
+    return updater?.installUpdate() ?? null
+  })
+
   ipcMain.handle('dialog:saveFile', async (_, defaultName: string) => {
     const result = await dialog.showSaveDialog({
       defaultPath: defaultName,
@@ -117,7 +147,11 @@ app.whenReady().then(async () => {
   backend = new BackendProcess(BACKEND_PORT)
   await backend.start()
 
+  updater = new UpdateManager(broadcastUpdateState)
+  updater.initialize()
+
   createWindow()
+  updater.scheduleStartupCheck()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

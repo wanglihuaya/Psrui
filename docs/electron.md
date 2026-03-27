@@ -17,8 +17,19 @@ Entry point for the Electron main process. Responsibilities:
 | Title bar | `hiddenInset` (macOS) with traffic lights at x=16, y=16 |
 | Background | `#0a0e17` (prevents white flash before renderer loads) |
 | Security | `contextIsolation: true`, `nodeIntegration: false`, `sandbox: false` |
+| Auto updates | `electron-updater` + GitHub Releases |
 
 In development, the renderer loads from `ELECTRON_RENDERER_URL` (Vite dev server). In production, it loads the built `index.html`.
+
+### Auto-update flow
+
+- Packaged builds initialize `UpdateManager` after `app.whenReady()`
+- Startup performs one background `checkForUpdates()`
+- Stable builds keep plain semver versions like `0.0.2`
+- Nightly builds are rewritten in CI to semver prereleases like `0.0.2-nightly.153`
+- `autoUpdater.allowPrerelease` is turned on only for nightly builds, so stable installs do not receive prereleases
+- Downloads are manual (`autoDownload = false`): the renderer checks first, then explicitly triggers `downloadUpdate()`
+- After download completes, the renderer triggers `installUpdate()`, which calls `quitAndInstall()`
 
 ### IPC handlers
 
@@ -31,8 +42,13 @@ In development, the renderer loads from `ELECTRON_RENDERER_URL` (Vite dev server
 | `backend:status` | invoke | Returns `backend.isRunning()` |
 | `backend:restart` | invoke | Calls `backend.restart()` |
 | `window:new` | invoke | Calls `createWindow(filePath?)` |
+| `updates:getState` | invoke | Returns the latest updater state snapshot |
+| `updates:check` | invoke | Starts an update check |
+| `updates:download` | invoke | Downloads the available update |
+| `updates:install` | invoke | Restarts and installs a downloaded update |
 | `shell:showItemInFolder` | invoke | `shell.showItemInFolder(path)` |
 | `file:open` | send (main → renderer) | Sent when a window is opened with a pre-selected file path |
+| `updates:state` | send (main → renderer) | Broadcasts updater state changes to every open window |
 
 ### App lifecycle
 
@@ -96,8 +112,15 @@ interface ElectronAPI {
   getBackendStatus: () => Promise<boolean>
   restartBackend: () => Promise<boolean>
   newWindow: (filePath?: string) => Promise<void>
+  getUpdateState: () => Promise<UpdateState | null>
+  checkForUpdates: () => Promise<UpdateState | null>
+  downloadUpdate: () => Promise<UpdateState | null>
+  installUpdate: () => Promise<UpdateState | null>
   onFileOpen: (callback: (path: string) => void) => void
+  onUpdateState: (callback: (state: UpdateState) => void) => () => void
 }
 ```
 
 `onFileOpen` registers a persistent `ipcRenderer.on` listener for the `file:open` event, which the main process sends when a window is created with a pre-loaded file path.
+
+`onUpdateState` subscribes the renderer to updater status broadcasts so the UI can move through `checking → available → downloading → downloaded`.

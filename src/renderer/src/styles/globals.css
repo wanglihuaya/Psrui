@@ -136,6 +136,11 @@ body {
   -webkit-app-region: no-drag;
 }
 
+.titlebar-traffic-space {
+  width: 92px;
+  height: 100%;
+}
+
 .plotly-chart .modebar {
   opacity: 0;
   transition: opacity 0.2s;

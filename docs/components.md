@@ -7,19 +7,21 @@ All components live under `src/renderer/src/components/`.
 ## TitleBar
 
 **File**: `TitleBar.tsx`  
-**Props**: `{ onOpenFile: () => void, onOpenFolder: () => void, hasUpdate?: boolean, onUpdate?: () => void }`
+**Props**: `{ onOpenFile: () => void, onOpenFolder: () => void, onCheckForUpdates: () => void, updateState: UpdateState | null, onUpdate?: () => void }`
 
 macOS-style title bar — traffic-light zone and app content share the **same horizontal line** (no separate spacer row):
 
-- **Traffic-lights zone** (76 px left padding) — native window controls sit here via `titleBarStyle: 'hiddenInset'`
-- **Fourth traffic-light button** — always visible at the right of the traffic lights zone:
-  - No update: grey 12 px circle (idle)
-  - Has update: green filled 12 px circle → on hover expands to a green pill showing `▼ Update` (300 ms transition)
+- **Traffic-lights zone** (92 px reserved spacer) — native window controls sit here via `titleBarStyle: 'hiddenInset'`
+- **Update action** — rendered on the right side of the title bar so the native red / yellow / green buttons keep the standard macOS grouping:
+  - Checking: `Checking…`
+  - Update found: hoverable green dot / pill to start download
+  - Downloading: progress pill
+  - Downloaded: `Restart to Update`
 - **Menu bar** — File / View / Help dropdown menus
 - **Center filename** — current file basename or app title
 - **Backend status indicator** — green `Live` or red pulsing `Offline`
 
-The menu bar closes on outside click or `Escape`.
+The menu bar closes on outside click or `Escape`. Help menu also includes **Check for Updates**.
 
 **Menu items**
 

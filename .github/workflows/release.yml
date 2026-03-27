@@ -36,6 +36,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -45,6 +47,23 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Compute app version
+        id: app-version
+        shell: bash
+        run: |
+          base_version="$(node -p "require('./package.json').version")"
+
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            app_version="${GITHUB_REF_NAME#v}"
+          else
+            app_version="${base_version}-nightly.${GITHUB_RUN_NUMBER}"
+          fi
+
+          echo "app_version=${app_version}" >> "$GITHUB_OUTPUT"
+
+      - name: Rewrite package version for packaged app
+        run: npm version --no-git-tag-version "${{ steps.app-version.outputs.app_version }}"
 
       - name: Build Electron app
         run: npm run build
@@ -75,6 +94,11 @@ jobs:
       contents: write
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
       - name: Download packaged artifacts
         uses: actions/download-artifact@v8
         with:
@@ -86,12 +110,18 @@ jobs:
         id: meta
         shell: bash
         run: |
+          base_version="$(node -p "require('./package.json').version")"
+
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             tag="${GITHUB_REF_NAME}"
             name="${GITHUB_REF_NAME}"
             prerelease=false
             make_latest=true
-            body="Automated stable release for ${GITHUB_REF_NAME}."
+            body="$(git tag -l --format='%(contents)' "${GITHUB_REF_NAME}")"
+            if [[ -z "${body//[[:space:]]/}" ]]; then
+              body="Stable release ${GITHUB_REF_NAME}."
+            fi
+            app_version="${GITHUB_REF_NAME#v}"
           else
             short_sha="${GITHUB_SHA::7}"
             timestamp="$(date -u +'%Y-%m-%d %H:%M UTC')"
@@ -100,12 +130,14 @@ jobs:
             prerelease=true
             make_latest=false
             body="Automated prerelease from main at commit ${GITHUB_SHA}."
+            app_version="${base_version}-nightly.${GITHUB_RUN_NUMBER}"
           fi
 
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
           echo "name=${name}" >> "$GITHUB_OUTPUT"
           echo "prerelease=${prerelease}" >> "$GITHUB_OUTPUT"
           echo "make_latest=${make_latest}" >> "$GITHUB_OUTPUT"
+          echo "app_version=${app_version}" >> "$GITHUB_OUTPUT"
           printf '%s\n' "${body}" > release-notes.txt
 
       - name: Publish GitHub release
