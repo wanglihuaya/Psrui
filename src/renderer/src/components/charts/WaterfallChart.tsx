@@ -2,9 +2,7 @@ import { useAtomValue } from 'jotai'
 import { waterfallDataAtom, metadataAtom } from '@/lib/store'
 import { settingsAtom } from '@/lib/settings'
 import { PlotlyWrapper } from './PlotlyWrapper'
-import type { ProcessingRecipe } from '../../../../shared/processing'
-
-type RecipeUpdate = ProcessingRecipe | ((prev: ProcessingRecipe) => ProcessingRecipe)
+import type { RecipeUpdate } from '../../../../shared/processing'
 
 interface WaterfallChartProps {
   onApplyProcessingRecipe: (

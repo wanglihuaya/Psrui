@@ -30,10 +30,8 @@ import {
   toaResultAtom
 } from '@/lib/store'
 import { PlotlyWrapper } from './charts/PlotlyWrapper'
-import type { ProcessingRecipe, ToaRequest, BatchRecipe } from '../../../shared/processing'
+import type { ProcessingRecipe, ToaRequest, BatchRecipe, RecipeUpdate } from '../../../shared/processing'
 import { cloneProcessingRecipe } from '../../../shared/processing'
-
-type RecipeUpdate = ProcessingRecipe | ((prev: ProcessingRecipe) => ProcessingRecipe)
 
 interface ProcessingInspectorProps {
   currentFile: string | null

@@ -147,12 +147,14 @@ export const DEFAULT_PROCESSING_RECIPE: ProcessingRecipe = {
   output: DEFAULT_OUTPUT_CONFIG
 }
 
+/**
+ * Union type for recipe updates - supports direct value or updater function
+ */
+export type RecipeUpdate = ProcessingRecipe | ((prev: ProcessingRecipe) => ProcessingRecipe)
+
+/**
+ * Deep clone a ProcessingRecipe using native structuredClone for better performance
+ */
 export function cloneProcessingRecipe(recipe: ProcessingRecipe): ProcessingRecipe {
-  return {
-    zap: { channels: [...recipe.zap.channels] },
-    pam: { ...recipe.pam },
-    calibration: { ...recipe.calibration },
-    toa: recipe.toa ? { ...recipe.toa } : null,
-    output: { ...recipe.output }
-  }
+  return structuredClone(recipe)
 }

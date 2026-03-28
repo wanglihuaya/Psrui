@@ -11,7 +11,7 @@ import {
   type SplitLayout,
   type SplitSlot
 } from '@/lib/store'
-import type { ProcessingRecipe } from '../../../shared/processing'
+import type { ProcessingRecipe, RecipeUpdate } from '../../../shared/processing'
 import { ProfileChart } from './charts/ProfileChart'
 import { WaterfallChart } from './charts/WaterfallChart'
 import { TimePhaseChart } from './charts/TimePhaseChart'
@@ -43,8 +43,6 @@ const LAYOUT_OPTIONS: { id: SplitLayout; icon: any; label: string }[] = [
   { id: 'vertical', icon: Rows2, label: '2 Rows' },
   { id: 'grid', icon: LayoutGrid, label: '2×2 Grid' }
 ]
-
-type RecipeUpdate = ProcessingRecipe | ((prev: ProcessingRecipe) => ProcessingRecipe)
 
 function ChartRenderer({
   tab,

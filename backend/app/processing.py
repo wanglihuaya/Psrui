@@ -15,6 +15,8 @@ from uuid import uuid4
 import numpy as np
 
 from app.data_provider import DataProvider
+from app.validators import validate_channels, validate_toa_algorithm, MAX_SCRUNCH_FACTOR
+from app.errors import ValidationError, NotFoundError, ProcessingError, CapabilityError
 
 
 DEFAULT_RECIPE: dict[str, Any] = {
@@ -59,14 +61,16 @@ def _deep_merge(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
 def normalize_recipe(recipe: dict[str, Any] | None) -> dict[str, Any]:
     merged = _deep_merge(DEFAULT_RECIPE, recipe or {})
 
+    # Validate and normalize zap channels
     channels = merged["zap"].get("channels") or []
-    merged["zap"]["channels"] = sorted({int(channel) for channel in channels if int(channel) >= 0})
+    merged["zap"]["channels"] = validate_channels(channels)
 
+    # Validate and normalize pam settings with max limits
     pam = merged["pam"]
     pam["dedisperse"] = bool(pam.get("dedisperse", True))
-    pam["tscrunchFactor"] = max(1, int(pam.get("tscrunchFactor", 1)))
-    pam["fscrunchFactor"] = max(1, int(pam.get("fscrunchFactor", 1)))
-    pam["bscrunchFactor"] = max(1, int(pam.get("bscrunchFactor", 1)))
+    pam["tscrunchFactor"] = min(MAX_SCRUNCH_FACTOR, max(1, int(pam.get("tscrunchFactor", 1))))
+    pam["fscrunchFactor"] = min(MAX_SCRUNCH_FACTOR, max(1, int(pam.get("fscrunchFactor", 1))))
+    pam["bscrunchFactor"] = min(MAX_SCRUNCH_FACTOR, max(1, int(pam.get("bscrunchFactor", 1))))
     pam["phaseRotateTurns"] = float(pam.get("phaseRotateTurns", 0.0))
 
     calibration = merged["calibration"]
@@ -80,7 +84,7 @@ def normalize_recipe(recipe: dict[str, Any] | None) -> dict[str, Any]:
     toa = merged.get("toa")
     if toa:
         toa["templatePath"] = toa.get("templatePath") or ""
-        toa["algorithm"] = (toa.get("algorithm") or "PGS").upper()
+        toa["algorithm"] = validate_toa_algorithm(toa.get("algorithm") or "PGS")
         toa["format"] = toa.get("format") or "tempo2"
         toa["timeScrunch"] = bool(toa.get("timeScrunch", False))
         toa["frequencyScrunch"] = bool(toa.get("frequencyScrunch", False))

@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useState } from 'react'
+import { useEffect, useEffectEvent, useState, useRef } from 'react'
 import { useAtom, useSetAtom, useAtomValue } from 'jotai'
 import { api } from '@/lib/api'
 import {
@@ -43,10 +43,8 @@ import {
 import { useShortcuts, type ShortcutCommandId } from '@/lib/shortcuts'
 import type { BackendRuntime } from '../../shared/backend'
 import type { AppCommandId } from '../../shared/commands'
-import { cloneProcessingRecipe, DEFAULT_PROCESSING_RECIPE, type ProcessingRecipe, type ToaRequest } from '../../shared/processing'
+import { cloneProcessingRecipe, DEFAULT_PROCESSING_RECIPE, type ProcessingRecipe, type ToaRequest, type RecipeUpdate } from '../../shared/processing'
 import type { UpdateState } from '../../shared/update'
-
-type RecipeUpdate = ProcessingRecipe | ((prev: ProcessingRecipe) => ProcessingRecipe)
 
 function buildProcessedArchiveName(filepath: string, extension: string): string {
   const filename = filepath.split(/[/\\]/).pop() ?? 'archive.ar'
@@ -75,6 +73,7 @@ export default function App() {
   const setError = useSetAtom(errorAtom)
   const setOpenFiles = useSetAtom(openFilesAtom)
   const setActiveTab = useSetAtom(activeTabAtom)
+  const activeTab = useAtomValue(activeTabAtom)
   const setHelpOpen = useSetAtom(helpOpenAtom)
   const setHelpSection = useSetAtom(helpSectionAtom)
   const setSettingsOpen = useSetAtom(settingsOpenAtom)
@@ -336,8 +335,46 @@ export default function App() {
     }
   }
 
-  const handleSaveImage = () => {
-    setError('Save Image is not implemented yet.')
+  const handleSaveImage = async () => {
+    if (!currentSessionId) {
+      setError('Open an archive first before exporting an image.')
+      return
+    }
+
+    // Get the current file name for default export name
+    const defaultName = currentFile
+      ? `${currentFile.split(/[/\\]/).pop()?.split('.')[0] ?? 'chart'}-${activeTab}.png`
+      : 'chart.png'
+
+    const outputPath = await window.electron.saveFile(defaultName, 'image')
+    if (!outputPath) {
+      return
+    }
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      // Find the Plotly chart element
+      const chartElement = document.querySelector('.plotly-chart .js-plotly-plot')
+      if (!chartElement) {
+        throw new Error('No chart found to export. Make sure a chart is visible.')
+      }
+
+      // Use Plotly's downloadImage function
+      const Plotly = await import('plotly.js-dist-min')
+      await Plotly.downloadImage(chartElement as HTMLElement, {
+        format: 'png',
+        width: 1920,
+        height: 1080,
+        filename: outputPath.replace(/\.png$/i, ''),
+        scale: 2
+      })
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to save image')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleSaveArchive = async () => {
